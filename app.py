@@ -7,6 +7,7 @@ import urllib.request
 import random
 import math
 import re
+import pydeck as pdk  # Librería para el mapa dinámico
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="TAXI SEGURO", page_icon="🚖", layout="centered")
@@ -43,7 +44,7 @@ def cargar_datos(hoja):
         cache_buster = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cache_buster}"
         df = pd.read_csv(url)
-        df.columns = df.columns.str.strip() # 🛠️ Limpieza de columnas
+        df.columns = df.columns.str.strip() # Limpieza de columnas
         return df
     except: return pd.DataFrame()
 
@@ -60,16 +61,13 @@ def formatear_internacional(prefijo, numero):
     p = str(prefijo).split(" ")[0].replace("+", "").strip()
     return p + (n[1:] if n.startswith("0") else n)
 
-# === LÓGICA DE ASIGNACIÓN POR TIPO DE VEHÍCULO ===
 def obtener_chofer_mas_cercano(lat_cliente, lon_cliente, tipo_solicitado):
     df_choferes = cargar_datos("CHOFERES")
     df_ubicaciones = cargar_datos("UBICACIONES")
     if df_choferes.empty or df_ubicaciones.empty: return None, None, None
 
-    # Extraer solo el texto (ej: "Camioneta" de "Camioneta 🛻")
     tipo_busqueda = tipo_solicitado.split(" ")[0].upper()
     
-    # Filtro: LIBRE + Tipo de Vehículo coincidente
     libres = df_choferes[
         (df_choferes['Estado'].astype(str).str.strip().str.upper() == 'LIBRE') & 
         (df_choferes['Tipo_Vehiculo'].astype(str).str.upper().str.contains(tipo_busqueda))
@@ -123,6 +121,51 @@ if enviar:
             
             if chof:
                 st.balloons()
+
+                # --- 📡 INICIO SISTEMA DE RASTREO DINÁMICO ---
+                df_u = cargar_datos("UBICACIONES")
+                # Obtenemos la última coordenada enviada por el conductor asignado
+                ubi_taxi = df_u[df_u['Conductor'] == chof].iloc[-1]
+                lat_t, lon_t = float(ubi_taxi['Latitud']), float(ubi_taxi['Longitud'])
+
+                st.markdown('<div class="step-header">📡 RASTREO DINÁMICO</div>', unsafe_allow_html=True)
+                
+                # Capas: Origen (Verde), Taxi (Rojo) y Ruta (Gris)
+                puntos = pdk.Layer(
+                    "ScatterplotLayer",
+                    data=[
+                        {"pos": [lon_actual, lat_actual], "color": [0, 255, 0], "label": "Tú"},
+                        {"pos": [lon_t, lat_t], "color": [255, 0, 0], "label": "Taxi"}
+                    ],
+                    get_position="pos",
+                    get_color="color",
+                    get_radius=100,
+                )
+
+                ruta = pdk.Layer(
+                    "LineLayer",
+                    data=[{"start": [lon_actual, lat_actual], "end": [lon_t, lat_t]}],
+                    get_source_position="start",
+                    get_target_position="end",
+                    get_color=[150, 150, 150],
+                    get_width=4,
+                )
+
+                st.pydeck_chart(pdk.Deck(
+                    map_style="mapbox://styles/mapbox/light-v9",
+                    initial_view_state=pdk.ViewState(
+                        latitude=(lat_actual + lat_t)/2, 
+                        longitude=(lon_actual + lon_t)/2, 
+                        zoom=13
+                    ),
+                    layers=[ruta, puntos]
+                ))
+
+                # Botón para actualizar el mapa manualmente
+                if st.button("🔄 ACTUALIZAR POSICIÓN DEL TAXI"):
+                    st.rerun()
+                # --- FIN RASTREO ---
+
                 st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 ID: {id_v}</span></div>', unsafe_allow_html=True)
                 if foto_chof and "http" in foto_chof:
                     id_f = re.search(r'[-\w]{25,}', foto_chof).group() if re.search(r'[-\w]{25,}', foto_chof) else ""
