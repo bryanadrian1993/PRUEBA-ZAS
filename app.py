@@ -7,7 +7,7 @@ import urllib.request
 import random
 import math
 import re
-import pydeck as pdk  # Librería para el mapa dinámico
+import pydeck as pdk  # Importación para el mapa dinámico
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="TAXI SEGURO", page_icon="🚖", layout="centered")
@@ -28,7 +28,6 @@ st.markdown("""
     .stButton>button { width: 100%; height: 50px; font-weight: bold; font-size: 18px; border-radius: 10px; }
     .id-badge { background-color: #F0F2F6; padding: 5px 15px; border-radius: 20px; border: 1px solid #CCC; font-weight: bold; color: #555; display: inline-block; margin-bottom: 10px; }
     .footer { text-align: center; color: #888; font-size: 14px; margin-top: 50px; border-top: 1px solid #eee; padding-top: 20px; }
-    .footer a { color: #E91E63; text-decoration: none; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -44,7 +43,7 @@ def cargar_datos(hoja):
         cache_buster = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cache_buster}"
         df = pd.read_csv(url)
-        df.columns = df.columns.str.strip() # Limpieza de columnas
+        df.columns = df.columns.str.strip() 
         return df
     except: return pd.DataFrame()
 
@@ -121,52 +120,58 @@ if enviar:
             
             if chof:
                 st.balloons()
-
-                # --- 📡 INICIO SISTEMA DE RASTREO DINÁMICO ---
-                df_u = cargar_datos("UBICACIONES")
-                # Obtenemos la última coordenada enviada por el conductor asignado
-                ubi_taxi = df_u[df_u['Conductor'] == chof].iloc[-1]
-                lat_t, lon_t = float(ubi_taxi['Latitud']), float(ubi_taxi['Longitud'])
-
-                st.markdown('<div class="step-header">📡 RASTREO DINÁMICO</div>', unsafe_allow_html=True)
                 
-                # Capas: Origen (Verde), Taxi (Rojo) y Ruta (Gris)
-                puntos = pdk.Layer(
-                    "ScatterplotLayer",
-                    data=[
-                        {"pos": [lon_actual, lat_actual], "color": [0, 255, 0], "label": "Tú"},
-                        {"pos": [lon_t, lat_t], "color": [255, 0, 0], "label": "Taxi"}
-                    ],
-                    get_position="pos",
-                    get_color="color",
-                    get_radius=100,
-                )
+                # --- 🛰️ SISTEMA DE RASTREO DINÁMICO (PYDECK) ---
+                try:
+                    df_ubi = cargar_datos("UBICACIONES")
+                    # Obtenemos la última posición del taxi asignado
+                    pos_taxi = df_ubi[df_ubi['Conductor'] == chof].iloc[-1]
+                    lat_t, lon_t = float(pos_taxi['Latitud']), float(pos_taxi['Longitud'])
 
-                ruta = pdk.Layer(
-                    "LineLayer",
-                    data=[{"start": [lon_actual, lat_actual], "end": [lon_t, lat_t]}],
-                    get_source_position="start",
-                    get_target_position="end",
-                    get_color=[150, 150, 150],
-                    get_width=4,
-                )
+                    st.markdown('<div class="step-header">📍 RASTREO EN TIEMPO REAL</div>', unsafe_allow_html=True)
+                    
+                    # Capa de Puntos (Verde: Cliente, Rojo: Taxi)
+                    capa_puntos = pdk.Layer(
+                        "ScatterplotLayer",
+                        data=[
+                            {"pos": [lon_actual, lat_actual], "color": [0, 255, 0], "nombre": "Tú"},
+                            {"pos": [lon_t, lat_t], "color": [255, 0, 0], "nombre": "Taxi"}
+                        ],
+                        get_position="pos",
+                        get_color="color",
+                        get_radius=80,
+                    )
 
-                st.pydeck_chart(pdk.Deck(
-                    map_style="mapbox://styles/mapbox/light-v9",
-                    initial_view_state=pdk.ViewState(
-                        latitude=(lat_actual + lat_t)/2, 
-                        longitude=(lon_actual + lon_t)/2, 
-                        zoom=13
-                    ),
-                    layers=[ruta, puntos]
-                ))
+                    # Capa de Línea (Ruta)
+                    capa_linea = pdk.Layer(
+                        "LineLayer",
+                        data=[{"start": [lon_actual, lat_actual], "end": [lon_t, lat_t]}],
+                        get_source_position="start",
+                        get_target_position="end",
+                        get_color=[150, 150, 150],
+                        get_width=5,
+                    )
 
-                # Botón para actualizar el mapa manualmente
-                if st.button("🔄 ACTUALIZAR POSICIÓN DEL TAXI"):
-                    st.rerun()
-                # --- FIN RASTREO ---
+                    # Renderizado del mapa
+                    st.pydeck_chart(pdk.Deck(
+                        map_style="mapbox://styles/mapbox/light-v9",
+                        initial_view_state=pdk.ViewState(
+                            latitude=(lat_actual + lat_t) / 2,
+                            longitude=(lon_actual + lon_t) / 2,
+                            zoom=14
+                        ),
+                        layers=[capa_linea, capa_puntos]
+                    ))
 
+                    if st.button("🔄 ACTUALIZAR MAPA"):
+                        st.rerun()
+
+                except Exception as e:
+                    st.info("⌛ Esperando coordenadas del conductor...")
+
+                # --- INFORMACIÓN DEL CONDUCTOR ---
                 st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 ID: {id_v}</span></div>', unsafe_allow_html=True)
+                
                 if foto_chof and "http" in foto_chof:
                     id_f = re.search(r'[-\w]{25,}', foto_chof).group() if re.search(r'[-\w]{25,}', foto_chof) else ""
                     if id_f:
@@ -175,6 +180,7 @@ if enviar:
                 st.success(f"✅ ¡Unidad Encontrada! Conductor: **{chof}**")
                 msg = urllib.parse.quote(f"🚖 *PEDIDO*\n🆔 *ID:* {id_v}\n👤 Cliente: {nombre_cli}\n📍 Ref: {ref_cli}\n🗺️ Mapa: {mapa_link}")
                 st.markdown(f'<a href="https://api.whatsapp.com/send?phone={t_chof}&text={msg}" target="_blank" style="background-color:#25D366;color:white;padding:15px;text-align:center;display:block;text-decoration:none;font-weight:bold;font-size:20px;border-radius:10px;">📲 ENVIAR UBICACIÓN</a>', unsafe_allow_html=True)
-            else: st.error(f"❌ No hay unidades tipo '{tipo_veh.split(' ')[0]}' disponibles cerca.")
+            else: 
+                st.error(f"❌ No hay unidades tipo '{tipo_veh.split(' ')[0]}' disponibles cerca.")
 
 st.markdown(f'<div class="footer"><p>© 2025 Taxi Seguro Global</p></div>', unsafe_allow_html=True)
