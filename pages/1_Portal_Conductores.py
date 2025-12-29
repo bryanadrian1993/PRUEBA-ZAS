@@ -10,10 +10,10 @@ from datetime import datetime
 from streamlit_js_eval import get_geolocation
 
 # --- ⚙️ CONFIGURACIÓN DE NEGOCIO ---
-TARIFA_POR_KM = 0.05        # Ajustado a 5 centavos como mencionaste anteriormente
+TARIFA_POR_KM = 0.05        
 DEUDA_MAXIMA = 10.00        
 LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO" 
-NUMERO_DEUNA = "09XXXXXXXX" # Pon tu número de Deuna aquí
+NUMERO_DEUNA = "09XXXXXXXX" 
 
 # --- 🔗 CONFIGURACIÓN TÉCNICA ---
 st.set_page_config(page_title="Portal Conductores", page_icon="🚖", layout="centered")
@@ -63,7 +63,6 @@ if st.session_state.usuario_activo:
     user_ape = st.session_state.datos_usuario['Apellido']
     fila_actual = df_fresh[(df_fresh['Nombre'] == user_nom) & (df_fresh['Apellido'] == user_ape)]
     
-    # Referencia por posición de columna para evitar KeyErrors (Columna 16: KM, Columna 17: DEUDA)
     km_actuales = float(fila_actual.iloc[0, 16]) if not fila_actual.empty else 0.0
     deuda_actual = float(fila_actual.iloc[0, 17]) if not fila_actual.empty else 0.0
     bloqueado = deuda_actual >= DEUDA_MAXIMA
@@ -83,9 +82,8 @@ if st.session_state.usuario_activo:
                     with open(ruta_final, "rb") as f:
                         data = base64.b64encode(f.read()).decode()
                     st.markdown(f'<img src="data:image/png;base64,{data}" width="100%">', unsafe_allow_html=True)
-                    st.caption(f"WhatsApp: {NUMERO_DEUNA}")
                 else:
-                    st.error("❌ Archivo 'qr_deuna.png' no encontrado.")
+                    st.error("❌ Archivo QR no encontrado.")
 
         if st.button("🔄 YA PAGUÉ, REVISAR MI SALDO", type="primary"):
             res = enviar_datos({"accion": "registrar_pago_deuda", "nombre_completo": f"{user_nom} {user_ape}"})
@@ -96,22 +94,19 @@ if st.session_state.usuario_activo:
         st.metric("💸 Deuda Actual", f"${deuda_actual:.2f}")
         st.progress(min(deuda_actual/DEUDA_MAXIMA, 1.0))
 
-        # --- LÓGICA GPS Y ODÓMETRO ---
         st.subheader(f"🚦 ESTADO: {st.session_state.datos_usuario.get('Estado', 'OCUPADO')}")
-        if st.session_state.datos_usuario.get('Estado') == "LIBRE":
+        if st.session_state.get('datos_usuario', {}).get('Estado') == "LIBRE":
             loc = get_geolocation(component_key='driver_gps')
             if loc:
                 lat_now, lon_now = loc['coords']['latitude'], loc['coords']['longitude']
                 enviar_datos({"accion": "actualizar_gps_chofer", "conductor": f"{user_nom} {user_ape}", "lat": lat_now, "lon": lon_now})
-                
                 if st.session_state.ultima_lat:
                     dist = calcular_distancia(st.session_state.ultima_lat, st.session_state.ultima_lon, lat_now, lon_now)
-                    if dist > 0.05: # Umbral de 50 metros para mayor precisión
+                    if dist > 0.05:
                         costo = dist * TARIFA_POR_KM
                         enviar_datos({"accion": "registrar_cobro_km", "nombre_completo": f"{user_nom} {user_ape}", "km": dist, "costo": costo})
                         st.session_state.ultima_lat, st.session_state.ultima_lon = lat_now, lon_now
-                else: 
-                    st.session_state.ultima_lat, st.session_state.ultima_lon = lat_now, lon_now
+                else: st.session_state.ultima_lat, st.session_state.ultima_lon = lat_now, lon_now
 
         c1, c2 = st.columns(2)
         with c1:
@@ -130,8 +125,8 @@ if st.session_state.usuario_activo:
         st.rerun()
 
 else:
-    # --- PANTALLA INICIAL: LOGIN Y REGISTRO ---
-    tab_log, tab_reg = st.tabs(["🔐 INGRESAR", "📝 REGISTRARME"])
+    # --- PANTALLA INICIAL: LOGIN, REGISTRO Y RECUPERACIÓN ---
+    tab_log, tab_reg, tab_rec = st.tabs(["🔐 INGRESAR", "📝 REGISTRARME", "🔑 RECUPERAR"])
     
     with tab_log:
         col1, col2 = st.columns(2)
@@ -140,7 +135,7 @@ else:
         l_pass = st.text_input("Contraseña", type="password", key="l_p")
         if st.button("ENTRAR AL PANEL", type="primary"):
             df = cargar_datos("CHOFERES")
-            match = df[(df['Nombre'].str.upper() == l_nom.upper()) & (df['Apellido'].str.upper() == l_ape.upper())]
+            match = df[(df['Nombre'].astype(str).str.upper() == l_nom.upper()) & (df['Apellido'].astype(str).str.upper() == l_ape.upper())]
             if not match.empty and str(match.iloc[0]['Clave']) == l_pass:
                 st.session_state.usuario_activo = True
                 st.session_state.datos_usuario = match.iloc[0].to_dict()
@@ -152,35 +147,48 @@ else:
             st.subheader("Registro de Nuevos Socios")
             r_nom = st.text_input("Nombres *")
             r_ape = st.text_input("Apellidos *")
-            r_email = st.text_input("Email (Correo Electrónico) *") # NUEVO CAMPO DE EMAIL
+            r_email = st.text_input("Email (Correo Electrónico) *")
             r_ced = st.text_input("Cédula/ID *")
             r_dir = st.text_input("Dirección *")
-            r_pais = st.selectbox("País de Residencia", PAISES)
+            r_pais = st.selectbox("País", PAISES)
             r_telf = st.text_input("WhatsApp (Sin código) *")
-            r_veh = st.selectbox("Tipo de Vehículo", VEHICULOS)
+            r_veh = st.selectbox("Vehículo", VEHICULOS)
             r_pla = st.text_input("Placa *")
             r_pass1 = st.text_input("Contraseña *", type="password")
-            
             if st.form_submit_button("✅ COMPLETAR REGISTRO"):
                 if r_nom and r_ape and r_email and r_pass1:
-                    # Validación simple de email
                     if not re.match(r"[^@]+@[^@]+\.[^@]+", r_email):
-                        st.error("❌ Por favor ingresa un correo electrónico válido.")
+                        st.error("Email inválido")
                     else:
-                        # Se añade "email" al envío de datos
-                        res = enviar_datos({
-                            "accion": "registrar_conductor", 
-                            "nombre": r_nom, 
-                            "apellido": r_ape, 
-                            "email": r_email, 
-                            "cedula": r_ced, 
-                            "direccion": r_dir,
-                            "pais": r_pais,
-                            "telefono": r_telf, 
-                            "tipo_vehiculo": r_veh,
-                            "placa": r_pla, 
-                            "clave": r_pass1
-                        })
-                        st.success("¡Registro exitoso! Ve a la pestaña INGRESAR.")
+                        enviar_datos({"accion": "registrar_conductor", "nombre": r_nom, "apellido": r_ape, "email": r_email, "cedula": r_ced, "direccion": r_dir, "pais": r_pais, "telefono": r_telf, "tipo_vehiculo": r_veh, "placa": r_pla, "clave": r_pass1})
+                        st.success("¡Registrado! Ya puedes ingresar.")
+                else: st.warning("Faltan campos")
+
+    with tab_rec:
+        st.subheader("Recuperar Cuenta")
+        st.info("Ingresa el email con el que te registraste para ver tus credenciales.")
+        rec_email = st.text_input("Tu Correo Electrónico")
+        if st.button("🔍 RECUPERAR MIS DATOS"):
+            if rec_email:
+                df_rec = cargar_datos("CHOFERES")
+                if not df_rec.empty and 'Email' in df_rec.columns:
+                    # Buscamos el email (ignorando mayúsculas/minúsculas)
+                    resultado = df_rec[df_rec['Email'].astype(str).str.lower() == rec_email.lower()]
+                    if not resultado.empty:
+                        res_nom = resultado.iloc[0]['Nombre']
+                        res_ape = resultado.iloc[0]['Apellido']
+                        res_cla = resultado.iloc[0]['Clave']
+                        
+                        st.write("---")
+                        st.success("✅ ¡Cuenta encontrada!")
+                        st.markdown(f"👤 **Usuario:** {res_nom} {res_ape}")
+                        st.markdown(f"🔑 **Contraseña:** `{res_cla}`")
+                        st.info("💡 Ahora puedes ir a la pestaña 'INGRESAR' con estos datos.")
+                    else:
+                        st.error("❌ No existe ningún conductor registrado con ese correo.")
                 else:
-                    st.warning("⚠️ Por favor completa todos los campos obligatorios (*)")
+                    st.error("No se pudo acceder a la base de datos.")
+            else:
+                st.warning("Escribe tu correo primero.")
+
+st.markdown('<div class="footer"><p>© 2025 Taxi Seguro Global</p></div>', unsafe_allow_html=True)
