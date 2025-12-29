@@ -8,25 +8,17 @@ import os
 import re
 from datetime import datetime
 from streamlit_js_eval import get_geolocation
-import pydeck as pdk
-from streamlit_autorefresh import st_autorefresh
 
 # --- ⚙️ CONFIGURACIÓN DE NEGOCIO ---
-TARIFA_POR_KM = 0.05        
+TARIFA_POR_KM = 0.05        # Ajustado a 5 centavos como mencionaste anteriormente
 DEUDA_MAXIMA = 10.00        
 LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO" 
-NUMERO_DEUNA = "09XXXXXXXX" 
+NUMERO_DEUNA = "09XXXXXXXX" # Pon tu número de Deuna aquí
 
 # --- 🔗 CONFIGURACIÓN TÉCNICA ---
 st.set_page_config(page_title="Portal Conductores", page_icon="🚖", layout="centered")
-
-# Auto-refresco cada 10 segundos para seguimiento en vivo si el usuario está activo
-if st.session_state.get('usuario_activo', False):
-    st_autorefresh(interval=10000, key="driver_refresh")
-
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
-# ✅ TU NUEVA URL DE SCRIPT INTEGRADA AQUÍ:
-URL_SCRIPT = "https://script.google.com/macros/s/AKfycbzivwxOGYSA33ekluigM6o6ZwwmavUKnzmEMxBUftKYqbblGGvbbYomci2qJE8zuYZi/exec"
+URL_SCRIPT = "https://script.google.com/macros/s/AKfycbwzOVH8c8f9WEoE4OJOTIccz_EgrOpZ8ySURTVRwi0bnQhFnWVdgfX1W8ivTIu5dFfs/exec"
 
 # --- 🔄 INICIALIZAR SESIÓN ---
 if 'usuario_activo' not in st.session_state: st.session_state.usuario_activo = False
@@ -43,9 +35,7 @@ def cargar_datos(hoja):
     try:
         cache_buster = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cache_buster}"
-        df = pd.read_csv(url)
-        df.columns = df.columns.str.strip()
-        return df
+        return pd.read_csv(url)
     except: return pd.DataFrame()
 
 def enviar_datos(datos):
@@ -61,7 +51,7 @@ def calcular_distancia(lat1, lon1, lat2, lon2):
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
     a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
-    return 2 * math.atan2(math.sqrt(a), math.sqrt(1-a)) R
+    return 2 * math.atan2(math.sqrt(a), math.sqrt(1-a)) * R
 
 # --- 📱 INTERFAZ ---
 st.title("🚖 Portal de Socios")
@@ -73,6 +63,7 @@ if st.session_state.usuario_activo:
     user_ape = st.session_state.datos_usuario['Apellido']
     fila_actual = df_fresh[(df_fresh['Nombre'] == user_nom) & (df_fresh['Apellido'] == user_ape)]
     
+    # Referencia por posición de columna para evitar KeyErrors (Columna 16: KM, Columna 17: DEUDA)
     km_actuales = float(fila_actual.iloc[0, 16]) if not fila_actual.empty else 0.0
     deuda_actual = float(fila_actual.iloc[0, 17]) if not fila_actual.empty else 0.0
     bloqueado = deuda_actual >= DEUDA_MAXIMA
@@ -92,8 +83,9 @@ if st.session_state.usuario_activo:
                     with open(ruta_final, "rb") as f:
                         data = base64.b64encode(f.read()).decode()
                     st.markdown(f'<img src="data:image/png;base64,{data}" width="100%">', unsafe_allow_html=True)
+                    st.caption(f"WhatsApp: {NUMERO_DEUNA}")
                 else:
-                    st.error("❌ Archivo QR no encontrado.")
+                    st.error("❌ Archivo 'qr_deuna.png' no encontrado.")
 
         if st.button("🔄 YA PAGUÉ, REVISAR MI SALDO", type="primary"):
             res = enviar_datos({"accion": "registrar_pago_deuda", "nombre_completo": f"{user_nom} {user_ape}"})
@@ -104,42 +96,22 @@ if st.session_state.usuario_activo:
         st.metric("💸 Deuda Actual", f"${deuda_actual:.2f}")
         st.progress(min(deuda_actual/DEUDA_MAXIMA, 1.0))
 
+        # --- LÓGICA GPS Y ODÓMETRO ---
         st.subheader(f"🚦 ESTADO: {st.session_state.datos_usuario.get('Estado', 'OCUPADO')}")
-        
-        loc = get_geolocation(component_key='driver_gps')
-        if loc:
-            lat_t, lon_t = loc['coords']['latitude'], loc['coords']['longitude']
-            
-            if st.session_state.datos_usuario.get('Estado') == "LIBRE":
-                enviar_datos({"accion": "actualizar_gps_chofer", "conductor": f"{user_nom} {user_ape}", "lat": lat_t, "lon": lon_t})
+        if st.session_state.datos_usuario.get('Estado') == "LIBRE":
+            loc = get_geolocation(component_key='driver_gps')
+            if loc:
+                lat_now, lon_now = loc['coords']['latitude'], loc['coords']['longitude']
+                enviar_datos({"accion": "actualizar_gps_chofer", "conductor": f"{user_nom} {user_ape}", "lat": lat_now, "lon": lon_now})
+                
                 if st.session_state.ultima_lat:
-                    dist = calcular_distancia(st.session_state.ultima_lat, st.session_state.ultima_lon, lat_t, lon_t)
-                    if dist > 0.05:
+                    dist = calcular_distancia(st.session_state.ultima_lat, st.session_state.ultima_lon, lat_now, lon_now)
+                    if dist > 0.05: # Umbral de 50 metros para mayor precisión
                         costo = dist * TARIFA_POR_KM
                         enviar_datos({"accion": "registrar_cobro_km", "nombre_completo": f"{user_nom} {user_ape}", "km": dist, "costo": costo})
-                        st.session_state.ultima_lat, st.session_state.ultima_lon = lat_t, lon_t
-                else: st.session_state.ultima_lat, st.session_state.ultima_lon = lat_t, lon_t
-
-            # --- MAPA DE RASTREO (BLOQUEADO Y CENTRADO) ---
-            puntos_mapa = pd.DataFrame([
-                {"lon": lon_t, "lat": lat_t, "color": [255, 215, 0], "info": f"🚖 {user_nom} {user_ape}\n🏷️ MI POSICIÓN"}
-            ])
-
-            st.pydeck_chart(pdk.Deck(
-                map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
-                initial_view_state=pdk.ViewState(latitude=lat_t, longitude=lon_t, zoom=16, pitch=0),
-                tooltip={"text": "{info}"},
-                layers=[
-                    pdk.Layer(
-                        "ScatterplotLayer", 
-                        data=puntos_mapa, 
-                        get_position="[lon, lat]", 
-                        get_color="color", 
-                        get_radius=15, 
-                        pickable=False # BLOQUEO TOTAL DE PUNTOS
-                    )
-                ]
-            ))
+                        st.session_state.ultima_lat, st.session_state.ultima_lon = lat_now, lon_now
+                else: 
+                    st.session_state.ultima_lat, st.session_state.ultima_lon = lat_now, lon_now
 
         c1, c2 = st.columns(2)
         with c1:
@@ -153,16 +125,13 @@ if st.session_state.usuario_activo:
                 st.session_state.datos_usuario['Estado'] = "OCUPADO"
                 st.rerun()
 
-        if st.button("🔄 ACTUALIZAR UBICACIÓN", use_container_width=True):
-            st.rerun()
-
     if st.button("🔒 CERRAR SESIÓN"):
         st.session_state.usuario_activo = False
         st.rerun()
 
 else:
-    # --- PANTALLA INICIAL ---
-    tab_log, tab_reg, tab_rec = st.tabs(["🔐 INGRESAR", "📝 REGISTRARME", "🔑 RECUPERAR"])
+    # --- PANTALLA INICIAL: LOGIN Y REGISTRO ---
+    tab_log, tab_reg = st.tabs(["🔐 INGRESAR", "📝 REGISTRARME"])
     
     with tab_log:
         col1, col2 = st.columns(2)
@@ -171,7 +140,7 @@ else:
         l_pass = st.text_input("Contraseña", type="password", key="l_p")
         if st.button("ENTRAR AL PANEL", type="primary"):
             df = cargar_datos("CHOFERES")
-            match = df[(df['Nombre'].astype(str).str.upper() == l_nom.upper()) & (df['Apellido'].astype(str).str.upper() == l_ape.upper())]
+            match = df[(df['Nombre'].str.upper() == l_nom.upper()) & (df['Apellido'].str.upper() == l_ape.upper())]
             if not match.empty and str(match.iloc[0]['Clave']) == l_pass:
                 st.session_state.usuario_activo = True
                 st.session_state.datos_usuario = match.iloc[0].to_dict()
@@ -183,31 +152,35 @@ else:
             st.subheader("Registro de Nuevos Socios")
             r_nom = st.text_input("Nombres *")
             r_ape = st.text_input("Apellidos *")
-            r_email = st.text_input("Email (Correo Electrónico) *")
+            r_email = st.text_input("Email (Correo Electrónico) *") # NUEVO CAMPO DE EMAIL
             r_ced = st.text_input("Cédula/ID *")
+            r_dir = st.text_input("Dirección *")
+            r_pais = st.selectbox("País de Residencia", PAISES)
             r_telf = st.text_input("WhatsApp (Sin código) *")
+            r_veh = st.selectbox("Tipo de Vehículo", VEHICULOS)
             r_pla = st.text_input("Placa *")
             r_pass1 = st.text_input("Contraseña *", type="password")
+            
             if st.form_submit_button("✅ COMPLETAR REGISTRO"):
                 if r_nom and r_ape and r_email and r_pass1:
+                    # Validación simple de email
                     if not re.match(r"[^@]+@[^@]+\.[^@]+", r_email):
-                        st.error("Email inválido")
+                        st.error("❌ Por favor ingresa un correo electrónico válido.")
                     else:
-                        enviar_datos({"accion": "registrar_conductor", "nombre": r_nom, "apellido": r_ape, "email": r_email, "cedula": r_ced, "telefono": r_telf, "placa": r_pla, "clave": r_pass1})
-                        st.success("¡Registrado! Ya puedes ingresar.")
-                else: st.warning("Faltan campos")
-
-    with tab_rec:
-        st.subheader("Recuperar Cuenta")
-        st.info("Ingresa tu email registrado. Te enviaremos tus credenciales al correo.")
-        rec_email = st.text_input("Tu Correo Electrónico", key="email_rec")
-        if st.button("✉️ ENVIAR MIS DATOS AL CORREO"):
-            if rec_email:
-                with st.spinner("Enviando..."):
-                    res = enviar_datos({"accion": "recuperar_por_correo", "email": rec_email})
-                    if res == "CORREO_ENVIADO":
-                        st.success(f"✅ Enviado con éxito a: {rec_email}")
-                        st.balloons()
-                    else: st.error("❌ Correo no encontrado.")
-
-st.markdown('<div class="footer"><p>© 2025 Taxi Seguro Global</p></div>', unsafe_allow_html=True)
+                        # Se añade "email" al envío de datos
+                        res = enviar_datos({
+                            "accion": "registrar_conductor", 
+                            "nombre": r_nom, 
+                            "apellido": r_ape, 
+                            "email": r_email, 
+                            "cedula": r_ced, 
+                            "direccion": r_dir,
+                            "pais": r_pais,
+                            "telefono": r_telf, 
+                            "tipo_vehiculo": r_veh,
+                            "placa": r_pla, 
+                            "clave": r_pass1
+                        })
+                        st.success("¡Registro exitoso! Ve a la pestaña INGRESAR.")
+                else:
+                    st.warning("⚠️ Por favor completa todos los campos obligatorios (*)")
