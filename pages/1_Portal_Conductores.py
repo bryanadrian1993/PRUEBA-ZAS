@@ -5,11 +5,12 @@ import urllib.request
 import base64
 import math
 import os
+import re
 from datetime import datetime
 from streamlit_js_eval import get_geolocation
 
 # --- ⚙️ CONFIGURACIÓN DE NEGOCIO ---
-TARIFA_POR_KM = 0.10        
+TARIFA_POR_KM = 0.05        # Ajustado a 5 centavos como mencionaste anteriormente
 DEUDA_MAXIMA = 10.00        
 LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO" 
 NUMERO_DEUNA = "09XXXXXXXX" # Pon tu número de Deuna aquí
@@ -27,7 +28,6 @@ if 'ultima_lon' not in st.session_state: st.session_state.ultima_lon = None
 
 # --- 📋 LISTAS ---
 PAISES = ["Ecuador", "Colombia", "Perú", "México", "España", "Estados Unidos", "Argentina", "Brasil", "Chile", "Otro"]
-IDIOMAS = ["Español", "English", "Português", "Français", "Italiano", "Deutsch", "Otro"]
 VEHICULOS = ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔", "Moto Entrega 🏍️"]
 
 # --- 🛠️ FUNCIONES ---
@@ -63,7 +63,7 @@ if st.session_state.usuario_activo:
     user_ape = st.session_state.datos_usuario['Apellido']
     fila_actual = df_fresh[(df_fresh['Nombre'] == user_nom) & (df_fresh['Apellido'] == user_ape)]
     
-    # Referencia por posición de columna para evitar KeyErrors
+    # Referencia por posición de columna para evitar KeyErrors (Columna 16: KM, Columna 17: DEUDA)
     km_actuales = float(fila_actual.iloc[0, 16]) if not fila_actual.empty else 0.0
     deuda_actual = float(fila_actual.iloc[0, 17]) if not fila_actual.empty else 0.0
     bloqueado = deuda_actual >= DEUDA_MAXIMA
@@ -77,32 +77,15 @@ if st.session_state.usuario_activo:
             st.markdown(f'''<a href="{LINK_PAYPAL}" target="_blank" style="text-decoration:none;"><div style="background-color:#003087;color:white;padding:12px;border-radius:10px;text-align:center;font-weight:bold;">🔵 PAYPAL</div></a>''', unsafe_allow_html=True)
         with col_p2:
             if st.button("📱 MOSTRAR QR DEUNA", use_container_width=True):
-                # 🚀 SOLUCIÓN DEFINITIVA DE IMAGEN CON BASE64
                 directorio_actual = os.path.dirname(os.path.abspath(__file__))
-                carpeta_raiz = os.path.dirname(directorio_actual)
-                
-                # Intentamos buscar en 3 lugares distintos
-                posibles_rutas = [
-                    os.path.join(carpeta_raiz, "qr_deuna.png"), # Carpeta Principal
-                    "qr_deuna.png",                            # Raíz ejecutable
-                    os.path.join(directorio_actual, "qr_deuna.png") # Dentro de pages
-                ]
-                
-                ruta_final = None
-                for r in posibles_rutas:
-                    if os.path.exists(r):
-                        ruta_final = r
-                        break
-                
-                if ruta_final:
-                    # Leemos la imagen y la convertimos para mostrarla sin errores de ruta
+                ruta_final = os.path.join(directorio_actual, "qr_deuna.png")
+                if os.path.exists(ruta_final):
                     with open(ruta_final, "rb") as f:
                         data = base64.b64encode(f.read()).decode()
                     st.markdown(f'<img src="data:image/png;base64,{data}" width="100%">', unsafe_allow_html=True)
                     st.caption(f"WhatsApp: {NUMERO_DEUNA}")
                 else:
                     st.error("❌ Archivo 'qr_deuna.png' no encontrado.")
-                    st.info(f"Ruta de búsqueda: {carpeta_raiz}")
 
         if st.button("🔄 YA PAGUÉ, REVISAR MI SALDO", type="primary"):
             res = enviar_datos({"accion": "registrar_pago_deuda", "nombre_completo": f"{user_nom} {user_ape}"})
@@ -113,19 +96,22 @@ if st.session_state.usuario_activo:
         st.metric("💸 Deuda Actual", f"${deuda_actual:.2f}")
         st.progress(min(deuda_actual/DEUDA_MAXIMA, 1.0))
 
+        # --- LÓGICA GPS Y ODÓMETRO ---
         st.subheader(f"🚦 ESTADO: {st.session_state.datos_usuario.get('Estado', 'OCUPADO')}")
         if st.session_state.datos_usuario.get('Estado') == "LIBRE":
             loc = get_geolocation(component_key='driver_gps')
             if loc:
                 lat_now, lon_now = loc['coords']['latitude'], loc['coords']['longitude']
                 enviar_datos({"accion": "actualizar_gps_chofer", "conductor": f"{user_nom} {user_ape}", "lat": lat_now, "lon": lon_now})
+                
                 if st.session_state.ultima_lat:
                     dist = calcular_distancia(st.session_state.ultima_lat, st.session_state.ultima_lon, lat_now, lon_now)
-                    if dist > 0.1:
+                    if dist > 0.05: # Umbral de 50 metros para mayor precisión
                         costo = dist * TARIFA_POR_KM
                         enviar_datos({"accion": "registrar_cobro_km", "nombre_completo": f"{user_nom} {user_ape}", "km": dist, "costo": costo})
                         st.session_state.ultima_lat, st.session_state.ultima_lon = lat_now, lon_now
-                else: st.session_state.ultima_lat, st.session_state.ultima_lon = lat_now, lon_now
+                else: 
+                    st.session_state.ultima_lat, st.session_state.ultima_lon = lat_now, lon_now
 
         c1, c2 = st.columns(2)
         with c1:
@@ -166,12 +152,35 @@ else:
             st.subheader("Registro de Nuevos Socios")
             r_nom = st.text_input("Nombres *")
             r_ape = st.text_input("Apellidos *")
+            r_email = st.text_input("Email (Correo Electrónico) *") # NUEVO CAMPO DE EMAIL
             r_ced = st.text_input("Cédula/ID *")
             r_dir = st.text_input("Dirección *")
+            r_pais = st.selectbox("País de Residencia", PAISES)
             r_telf = st.text_input("WhatsApp (Sin código) *")
+            r_veh = st.selectbox("Tipo de Vehículo", VEHICULOS)
             r_pla = st.text_input("Placa *")
             r_pass1 = st.text_input("Contraseña *", type="password")
+            
             if st.form_submit_button("✅ COMPLETAR REGISTRO"):
-                if r_nom and r_pass1:
-                    res = enviar_datos({"accion": "registrar_conductor", "nombre": r_nom, "apellido": r_ape, "cedula": r_ced, "telefono": r_telf, "placa": r_pla, "clave": r_pass1})
-                    st.success("¡Registro exitoso! Ve a la pestaña INGRESAR.")
+                if r_nom and r_ape and r_email and r_pass1:
+                    # Validación simple de email
+                    if not re.match(r"[^@]+@[^@]+\.[^@]+", r_email):
+                        st.error("❌ Por favor ingresa un correo electrónico válido.")
+                    else:
+                        # Se añade "email" al envío de datos
+                        res = enviar_datos({
+                            "accion": "registrar_conductor", 
+                            "nombre": r_nom, 
+                            "apellido": r_ape, 
+                            "email": r_email, 
+                            "cedula": r_ced, 
+                            "direccion": r_dir,
+                            "pais": r_pais,
+                            "telefono": r_telf, 
+                            "tipo_vehiculo": r_veh,
+                            "placa": r_pla, 
+                            "clave": r_pass1
+                        })
+                        st.success("¡Registro exitoso! Ve a la pestaña INGRESAR.")
+                else:
+                    st.warning("⚠️ Por favor completa todos los campos obligatorios (*)")
