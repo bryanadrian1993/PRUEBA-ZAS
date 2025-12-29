@@ -3,3 +3,4 @@ pandas
 st-gsheets-connection
 streamlit-js-eval
 pydeck
+streamlit-autorefresh
