@@ -120,20 +120,26 @@ if st.session_state.viaje_confirmado:
         st.markdown('<div class="step-header">📍 RASTREO POR CARRETERA</div>', unsafe_allow_html=True)
         camino_data = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
         
-        # Puntos de localización estilizados: Conductor Amarillo | Cliente Verde
+        # Puntos de localización: Conductor Amarillo | Cliente Verde
         puntos_mapa = pd.DataFrame([
             {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "color": [34, 139, 34], "border": [255, 255, 255], "label": "Tú"},
             {"lon": lon_t, "lat": lat_t, "color": [255, 215, 0], "border": [0, 0, 0], "label": "Conductor (Taxi)"}
         ])
 
+        # Vista centrada exactamente en el cliente
         st.pydeck_chart(pdk.Deck(
             map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
-            initial_view_state=pdk.ViewState(latitude=(dp['lat_cli']+lat_t)/2, longitude=(dp['lon_cli']+lon_t)/2, zoom=16, pitch=0),
+            initial_view_state=pdk.ViewState(
+                latitude=dp['lat_cli'], 
+                longitude=dp['lon_cli'], 
+                zoom=16, 
+                pitch=0
+            ),
             layers=[
                 # Línea de carretera azul
                 pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[0, 150, 255], get_width=10),
                 
-                # Puntos de localización pequeños y profesionales
+                # Puntos de localización pequeños y profesionales (Radio 15)
                 pdk.Layer(
                     "ScatterplotLayer",
                     data=puntos_mapa,
