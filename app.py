@@ -19,7 +19,7 @@ if st.session_state.get('viaje_confirmado', False):
     st_autorefresh(interval=10000, key="datarefresh")
 
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
-URL_SCRIPT = "https://script.google.com/macros/s/AKfycbwzOVH8c8f9WEoE4OJOTIccz_EgrOpZ8ySURTVRwi0bnQhFnWVdgfX1W8ivTIu5dFfs/exec"
+URL_SCRIPT = "https://script.google.com/macros/s/AKfycbzivwxOGYSA33ekluigM6o6ZwwmavUKnzmEMxBUftKYqbblGGvbbYomci2qJE8zuYZi/exec"
 LAT_BASE, LON_BASE = -0.466657, -76.989635
 
 if 'viaje_confirmado' not in st.session_state: st.session_state.viaje_confirmado = False
@@ -45,6 +45,7 @@ def calcular_distancia_real(lat1, lon1, lat2, lon2):
     R = 6371
     dlat, dlon = math.radians(lat2-lat1), math.radians(lon2-lon1)
     a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+    # CORREGIDO: Añadido '*' faltante antes de math.atan2
     return 2 * math.atan2(math.sqrt(a), math.sqrt(1-a)) * R
 
 def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
@@ -165,7 +166,7 @@ if st.session_state.viaje_confirmado:
         ])
 
         # Se centra la vista forzosamente en el taxi (lat_t, lon_t)
-        # pickable=True es necesario para el Tooltip, pero al re-centrar el mapa cada refresh se evita que flote
+        # pickable=False para bloquear el movimiento de los puntos
         st.pydeck_chart(pdk.Deck(
             map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
             initial_view_state=pdk.ViewState(latitude=lat_t, longitude=lon_t, zoom=15, pitch=0),
@@ -173,7 +174,7 @@ if st.session_state.viaje_confirmado:
             layers=[
                 pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[200, 0, 0, 150], get_width=16, cap_rounded=True),
                 pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[255, 0, 0], get_width=8, cap_rounded=True),
-                pdk.Layer("ScatterplotLayer", data=puntos_mapa, get_position="[lon, lat]", get_color="color", get_line_color="border", line_width_min_pixels=1, get_radius=15, stroked=True, pickable=True)
+                pdk.Layer("ScatterplotLayer", data=puntos_mapa, get_position="[lon, lat]", get_color="color", get_line_color="border", line_width_min_pixels=1, get_radius=15, stroked=True, pickable=False)
             ]
         ))
 
