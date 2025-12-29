@@ -50,6 +50,7 @@ def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
         return [{"path": [[lon1, lat1], [lon2, lat2]]}]
 
 def cargar_datos(hoja):
+    """Carga datos de Sheets y limpia columnas."""
     try:
         cache_buster = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cache_buster}"
@@ -59,6 +60,7 @@ def cargar_datos(hoja):
     except: return pd.DataFrame()
 
 def enviar_datos_a_sheets(datos):
+    """Registra el pedido en la base de datos."""
     try:
         params = urllib.parse.urlencode(datos)
         with urllib.request.urlopen(f"{URL_SCRIPT}?{params}") as response:
@@ -66,6 +68,7 @@ def enviar_datos_a_sheets(datos):
     except: return "Error"
 
 def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
+    """Busca el conductor libre más cercano y detecta su país."""
     df_c, df_u = cargar_datos("CHOFERES"), cargar_datos("UBICACIONES")
     if df_c.empty or df_u.empty: return None, None, None
     tipo_b = tipo_sol.split(" ")[0].upper()
@@ -83,7 +86,6 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
         # --- 🌍 LÓGICA DE PAÍS DINÁMICA ---
         t = str(mejor['Telefono']).split(".")[0]
         pais_chofer = str(mejor.get('Pais', 'Ecuador'))
-        
         prefijos = {
             "Ecuador": "593", "Colombia": "57", "Perú": "51", "México": "52",
             "España": "34", "Estados Unidos": "1", "Argentina": "54", "Brasil": "55", "Chile": "56"
@@ -145,12 +147,22 @@ if st.session_state.viaje_confirmado:
             map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
             initial_view_state=pdk.ViewState(latitude=lat_t, longitude=lon_t, zoom=15, pitch=0),
             layers=[
-                # Capa inferior (Sombra/Borde de la ruta)
+                # Línea estilo Google Maps (Doble capa roja)
                 pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[200, 0, 0, 150], get_width=16, cap_rounded=True),
-                # Capa superior (Línea Roja Principal)
                 pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[255, 0, 0], get_width=8, cap_rounded=True),
-                # Puntos de localización
-                pdk.Layer("ScatterplotLayer", data=puntos_mapa, get_position="[lon, lat]", get_color="color", get_line_color="border", line_width_min_pixels=1, get_radius=15, stroked=True, pickable=True)
+                
+                # Puntos de localización pequeños (Radio 15)
+                pdk.Layer(
+                    "ScatterplotLayer",
+                    data=puntos_mapa,
+                    get_position="[lon, lat]",
+                    get_color="color",
+                    get_line_color="border",
+                    line_width_min_pixels=1,
+                    get_radius=15, 
+                    stroked=True,
+                    pickable=True
+                )
             ],
             tooltip={"text": "{label}"}
         ))
