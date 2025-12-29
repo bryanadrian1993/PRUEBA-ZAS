@@ -10,7 +10,7 @@ import math
 import re
 import pydeck as pdk
 
-# --- ⚙️ CONFIGURACIÓN ---
+# --- ⚙️ CONFIGURACIÓN DEL SISTEMA ---
 st.set_page_config(page_title="TAXI SEGURO", page_icon="🚖", layout="centered")
 
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
@@ -30,7 +30,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 🛠️ FUNCIONES TÉCNICAS ---
+# --- 🛠️ FUNCIONES ---
 
 def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
     """Consulta OSRM para trazar el camino real por calles."""
@@ -38,10 +38,8 @@ def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
         url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
         with urllib.request.urlopen(url, timeout=4) as response:
             data = json.loads(response.read().decode())
-            # Retorna el formato de lista de coordenadas requerido por PathLayer
             return [{"path": data['routes'][0]['geometry']['coordinates']}]
     except:
-        # Respaldo de línea recta si falla el servidor de rutas
         return [{"path": [[lon1, lat1], [lon2, lat2]]}]
 
 def cargar_datos(hoja):
@@ -55,7 +53,6 @@ def cargar_datos(hoja):
     except: return pd.DataFrame()
 
 def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
-    """Lógica de asignación de conductor cercano."""
     df_c, df_u = cargar_datos("CHOFERES"), cargar_datos("UBICACIONES")
     if df_c.empty or df_u.empty: return None, None, None
     tipo_b = tipo_sol.split(" ")[0].upper()
@@ -74,7 +71,7 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
         return f"{mejor['Nombre']} {mejor['Apellido']}", t, str(mejor['Foto_Perfil'])
     return None, None, None
 
-# --- 📱 INTERFAZ PRINCIPAL ---
+# --- 📱 INTERFAZ ---
 st.markdown('<div class="main-title">🚖 TAXI SEGURO</div>', unsafe_allow_html=True)
 
 loc = get_geolocation()
@@ -84,8 +81,8 @@ if not st.session_state.viaje_confirmado:
     with st.form("form_pedido"):
         nombre_cli = st.text_input("Tu Nombre:")
         ref_cli = st.text_input("Referencia")
-        tipo_veh = st.selectbox("Vehículo", ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔"])
-        if st.form_submit_button("🚖 SOLICITAR UNIDAD"):
+        tipo_veh = st.selectbox("¿Qué necesitas?", ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔"])
+        if st.form_submit_button("🚖 SOLICITAR"):
             chof, t_chof, foto = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
             if chof:
                 st.session_state.viaje_confirmado = True
@@ -105,49 +102,28 @@ if st.session_state.viaje_confirmado:
         
         st.markdown('<div class="step-header">📍 RASTREO POR CARRETERA</div>', unsafe_allow_html=True)
         
-        # 1. Obtención de la línea de la carretera
+        # 1. Datos de la Línea y los Iconos
         camino_real = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
-        
-        # 2. Configuración de Iconos (Persona y Taxi Amarillo)
         ICON_DATA = [
             {"pos": [dp['lon_cli'], dp['lat_cli']], "url": "https://img.icons8.com/fluency/96/person-male.png", "label": "Tú"},
             {"pos": [lon_t, lat_t], "url": "https://img.icons8.com/color/96/taxi.png", "label": "Taxi Amarillo"}
         ]
 
-        # 3. Renderizado del Mapa Pydeck
+        # 2. Renderizado del Mapa Completo
         st.pydeck_chart(pdk.Deck(
             map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
             initial_view_state=pdk.ViewState(latitude=(dp['lat_cli']+lat_t)/2, longitude=(dp['lon_cli']+lon_t)/2, zoom=15),
             layers=[
-                # Capa de la línea azul por carretera
-                pdk.Layer(
-                    "PathLayer", 
-                    data=camino_real, 
-                    get_path="path", 
-                    get_color=[0, 150, 255], 
-                    get_width=12,
-                    width_min_pixels=5
-                ),
-                # Capa de los iconos (Persona y Taxi)
-                pdk.Layer(
-                    "IconLayer",
-                    data=ICON_DATA,
-                    get_icon='url',
-                    get_size=4,
-                    size_scale=15,
-                    get_position='pos',
-                    pickable=True
-                )
-            ],
-            tooltip={"text": "{label}"}
+                pdk.Layer("PathLayer", data=camino_real, get_path="path", get_color=[0, 150, 255], get_width=12),
+                pdk.Layer("IconLayer", data=ICON_DATA, get_icon='url', get_size=4, size_scale=15, get_position='pos')
+            ]
         ))
         
         if st.button("🔄 ACTUALIZAR MAPA"): st.rerun()
 
-        # Sección de WhatsApp y Datos del Pedido
+        # 3. Datos del Pedido y BOTÓN DE WHATSAPP RESTAURADO
         st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 ID: {dp["id"]}</span></div>', unsafe_allow_html=True)
         
-        # Mensaje con link de mapa restaurado
         mapa_link = f"https://www.google.com/maps?q={dp['lat_cli']},{dp['lon_cli']}"
         msg_wa = urllib.parse.quote(f"🚖 *PEDIDO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre']}\n📍 Ref: {dp['ref']}\n🗺️ *Mapa:* {mapa_link}")
         
@@ -156,5 +132,5 @@ if st.session_state.viaje_confirmado:
         if st.button("❌ NUEVO PEDIDO"):
             st.session_state.viaje_confirmado = False
             st.rerun()
-    except Exception:
-        st.info("⌛ Recibiendo coordenadas del taxi...")
+            
+    except Exception: st.info("⌛ Recibiendo señal del taxi...")
