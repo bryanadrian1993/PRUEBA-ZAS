@@ -7,9 +7,10 @@ import urllib.request
 import json
 import random
 import math
+import re
 import pydeck as pdk
 
-# --- ⚙️ CONFIGURACIÓN ---
+# --- ⚙️ CONFIGURACIÓN DEL SISTEMA ---
 st.set_page_config(page_title="TAXI SEGURO", page_icon="🚖", layout="centered")
 
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
@@ -31,6 +32,7 @@ st.markdown("""
 # --- 🛠️ FUNCIONES ---
 
 def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
+    """Consulta OSRM para trazar el camino real por calles."""
     try:
         url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
         with urllib.request.urlopen(url, timeout=4) as response:
@@ -40,6 +42,7 @@ def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
         return [{"path": [[lon1, lat1], [lon2, lat2]]}]
 
 def cargar_datos(hoja):
+    """Carga y limpia datos de Google Sheets evitando el caché."""
     try:
         cb = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cb}"
@@ -49,6 +52,7 @@ def cargar_datos(hoja):
     except: return pd.DataFrame()
 
 def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
+    """Búsqueda del conductor más cercano en la base de datos."""
     df_c, df_u = cargar_datos("CHOFERES"), cargar_datos("UBICACIONES")
     if df_c.empty or df_u.empty: return None, None
     tipo_b = tipo_sol.split(" ")[0].upper()
@@ -96,20 +100,20 @@ if st.session_state.viaje_confirmado:
         pos_t = df_u[df_u['Conductor'] == dp['chof']].iloc[-1]
         lat_t, lon_t = float(pos_t['Latitud']), float(pos_t['Longitud'])
         
-        # 🗺️ RUTA POR CARRETERA
+        # 🟢 DATOS DE RUTA E ICONOS
         camino_real = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
         
-        # 🟢 DATOS DE ICONOS CON URLs DIRECTAS (MÁS ESTABLE)
-        ICON_DATA = [
+        # Configuración explícita de iconos para evitar fallos de carga
+        icon_data = [
             {
                 "pos": [dp['lon_cli'], dp['lat_cli']],
-                "url": "https://img.icons8.com/fluency/96/person-male.png",
+                "icon_url": "https://img.icons8.com/fluency/96/person-male.png",
                 "label": "Tú"
             },
             {
                 "pos": [lon_t, lat_t],
-                "url": "https://img.icons8.com/color/96/taxi.png",
-                "label": "Tu Taxi Amarillo"
+                "icon_url": "https://img.icons8.com/color/96/taxi.png",
+                "label": "Taxi Amarillo"
             }
         ]
 
@@ -117,13 +121,14 @@ if st.session_state.viaje_confirmado:
             map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
             initial_view_state=pdk.ViewState(latitude=(dp['lat_cli']+lat_t)/2, longitude=(dp['lon_cli']+lon_t)/2, zoom=15),
             layers=[
-                # Capa 1: Línea Azul
-                pdk.Layer("PathLayer", data=camino_real, get_path="path", get_color=[0, 120, 255], get_width=15),
-                # Capa 2: Iconos Reales
+                # Capa 1: Línea Azul (Carretera)
+                pdk.Layer("PathLayer", data=camino_real, get_path="path", get_color=[0, 150, 255], get_width=15),
+                
+                # Capa 2: Iconos (Persona y Taxi)
                 pdk.Layer(
                     "IconLayer",
-                    data=ICON_DATA,
-                    get_icon='url',
+                    data=icon_data,
+                    get_icon='icon_url',
                     get_size=4,
                     size_scale=15,
                     get_position='pos',
@@ -135,16 +140,16 @@ if st.session_state.viaje_confirmado:
         
         if st.button("🔄 ACTUALIZAR UBICACIÓN"): st.rerun()
 
-        # 🟢 BOTÓN DE WHATSAPP CON MENSAJE COMPLETO
+        # 🟢 BOTÓN DE CONTACTO WHATSAPP
         st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 Viaje: {dp["id"]}</span></div>', unsafe_allow_html=True)
         
         link_google = f"https://www.google.com/maps?q={dp['lat_cli']},{dp['lon_cli']}"
-        msg_wa = urllib.parse.quote(f"🚖 *NUEVO SERVICIO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre']}\n📍 Ref: {dp['ref']}\n🗺️ *Ubicación:* {link_google}")
+        msg_wa = urllib.parse.quote(f"🚖 *PEDIDO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre']}\n📍 Ref: {dp['ref']}\n🗺️ *Ubicación:* {link_google}")
         
         st.markdown(f'''
             <a href="https://api.whatsapp.com/send?phone={dp["t_chof"]}&text={msg_wa}" target="_blank" 
                style="background-color:#25D366; color:white; padding:15px; text-align:center; display:block; text-decoration:none; font-weight:bold; border-radius:10px; font-size:20px;">
-               📲 ENVIAR PEDIDO POR WHATSAPP
+               📲 ENVIAR UBICACIÓN POR WHATSAPP
             </a>
         ''', unsafe_allow_html=True)
         
