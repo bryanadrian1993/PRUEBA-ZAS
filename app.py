@@ -42,10 +42,9 @@ def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
             data = json.loads(response.read().decode())
             return [{"path": data['routes'][0]['geometry']['coordinates']}]
     except:
-        return [{"path": [[lon1, lat1], [lon2, lat2]]}] # Respaldo línea recta
+        return [{"path": [[lon1, lat1], [lon2, lat2]]}]
 
 def cargar_datos(hoja):
-    """Carga datos de Sheets y limpia columnas."""
     try:
         cache_buster = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cache_buster}"
@@ -55,7 +54,6 @@ def cargar_datos(hoja):
     except: return pd.DataFrame()
 
 def enviar_datos_a_sheets(datos):
-    """Registra el pedido en la base de datos."""
     try:
         params = urllib.parse.urlencode(datos)
         with urllib.request.urlopen(f"{URL_SCRIPT}?{params}") as response:
@@ -63,7 +61,6 @@ def enviar_datos_a_sheets(datos):
     except: return "Error"
 
 def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
-    """Busca el conductor libre más cercano en el Excel."""
     df_c, df_u = cargar_datos("CHOFERES"), cargar_datos("UBICACIONES")
     if df_c.empty or df_u.empty: return None, None, None
     tipo_b = tipo_sol.split(" ")[0].upper()
@@ -116,19 +113,35 @@ if st.session_state.viaje_confirmado:
         pos_t = df_u[df_u['Conductor'] == dp['chof']].iloc[-1]
         lat_t, lon_t = float(pos_t['Latitud']), float(pos_t['Longitud'])
 
-        # --- SECCIÓN DEL MAPA ---
+        # --- SECCIÓN DEL MAPA REFINADO ---
         st.markdown('<div class="step-header">📍 RASTREO POR CARRETERA</div>', unsafe_allow_html=True)
         camino_data = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
-        ICON_LIST = [
-            {"pos": [dp['lon_cli'], dp['lat_cli']], "url": "https://img.icons8.com/fluency/96/person-male.png", "label": "Tú"},
-            {"pos": [lon_t, lat_t], "url": "https://img.icons8.com/color/96/taxi.png", "label": "Taxi Amarillo"}
-        ]
+        
+        # Puntos de localización elegantes (Scatterplot con borde)
+        puntos_mapa = pd.DataFrame([
+            {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "color": [34, 139, 34], "border": [255, 255, 255], "label": "Tú"},
+            {"lon": lon_t, "lat": lat_t, "color": [255, 215, 0], "border": [0, 0, 0], "label": "Taxi"}
+        ])
+
         st.pydeck_chart(pdk.Deck(
             map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
             initial_view_state=pdk.ViewState(latitude=(dp['lat_cli']+lat_t)/2, longitude=(dp['lon_cli']+lon_t)/2, zoom=15, pitch=0),
             layers=[
+                # Línea de carretera azul
                 pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[0, 150, 255], get_width=12),
-                pdk.Layer("IconLayer", data=ICON_LIST, get_icon='url', get_size=4, size_scale=15, get_position='pos', pickable=True)
+                
+                # Puntos de localización (No muy grandes)
+                pdk.Layer(
+                    "ScatterplotLayer",
+                    data=puntos_mapa,
+                    get_position="[lon, lat]",
+                    get_color="color",
+                    get_line_color="border",
+                    line_width_min_pixels=2,
+                    get_radius=50,
+                    stroked=True,
+                    pickable=True
+                )
             ],
             tooltip={"text": "{label}"}
         ))
