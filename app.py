@@ -126,13 +126,13 @@ if st.session_state.viaje_confirmado:
             {"lon": lon_t, "lat": lat_t, "color": [255, 215, 0], "border": [0, 0, 0], "label": "Conductor (Taxi)"}
         ])
 
-        # Vista centrada exactamente en el cliente
+        # Vista centrada en el CONDUCTOR con zoom para ver el trayecto hacia el cliente
         st.pydeck_chart(pdk.Deck(
             map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
             initial_view_state=pdk.ViewState(
-                latitude=dp['lat_cli'], 
-                longitude=dp['lon_cli'], 
-                zoom=16, 
+                latitude=lat_t,            # Centrado en el Taxi
+                longitude=lon_t,           # Centrado en el Taxi
+                zoom=15,                   # Zoom prudente para ver el entorno
                 pitch=0
             ),
             layers=[
