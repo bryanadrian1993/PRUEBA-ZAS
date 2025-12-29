@@ -88,17 +88,19 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
             if d < menor: menor, mejor = d, chofer
             
     if mejor is not None:
-        t = str(mejor['Telefono']).split(".")[0]
+        t_original = str(mejor['Telefono']).split(".")[0]
+        t_limpio = re.sub(r'\D', '', t_original)
         pais = str(mejor.get('Pais', 'Ecuador'))
         prefijos = {"Ecuador": "593", "Colombia": "57", "Perú": "51", "México": "52"}
         cod = prefijos.get(pais, "593")
-        if pais == "Ecuador" and t.startswith("09"): t = cod + t[1:]
-        elif not t.startswith(cod): t = cod + t
+        if pais == "Ecuador" and t_limpio.startswith("09"): final_phone = cod + t_limpio[1:]
+        elif t_limpio.startswith(cod): final_phone = t_limpio
+        else: final_phone = cod + t_limpio
         placa = str(mejor.get('Placa', 'S/P'))
-        return f"{mejor['Nombre']} {mejor['Apellido']}", t, str(mejor['Foto_Perfil']), placa
+        return f"{mejor['Nombre']} {mejor['Apellido']}", final_phone, str(mejor['Foto_Perfil']), placa
     return None, None, None, "S/P"
 
-# --- 📱 INTERFAZ ---
+# --- 📱 INTERFAZ PRINCIPAL ---
 st.markdown('<div class="main-title">🚖 TAXI SEGURO</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">🌎 SERVICIO GLOBAL</div>', unsafe_allow_html=True)
 
@@ -141,7 +143,7 @@ if st.session_state.viaje_confirmado:
 
         st.success(f"✅ Conductor **{dp['chof']}** asignado.")
 
-        # --- 2. BOTONES DE ACCIÓN (DEBAJO DE INFO CONDUCTOR) ---
+        # --- 2. BOTONES DE ACCIÓN ---
         msg_wa = urllib.parse.quote(f"🚖 *PEDIDO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre']}\n📍 Ref: {dp['ref']}\n🗺️ *Mapa:* {dp['mapa']}")
         st.markdown(f'<a href="https://api.whatsapp.com/send?phone={dp["t_chof"]}&text={msg_wa}" target="_blank" style="background-color:#25D366;color:white;padding:15px;text-align:center;display:block;text-decoration:none;font-weight:bold;font-size:20px;border-radius:10px;margin-bottom:10px;">📲 CONTACTAR CONDUCTOR</a>', unsafe_allow_html=True)
 
@@ -162,6 +164,8 @@ if st.session_state.viaje_confirmado:
             {"lon": lon_t, "lat": lat_t, "color": [255, 215, 0], "border": [0, 0, 0], "info": f"🚖 {dp['chof']}\n🏷️ PLACA: {dp['placa']}"}
         ])
 
+        # Se centra la vista forzosamente en el taxi (lat_t, lon_t)
+        # pickable=True es necesario para el Tooltip, pero al re-centrar el mapa cada refresh se evita que flote
         st.pydeck_chart(pdk.Deck(
             map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
             initial_view_state=pdk.ViewState(latitude=lat_t, longitude=lon_t, zoom=15, pitch=0),
@@ -169,8 +173,7 @@ if st.session_state.viaje_confirmado:
             layers=[
                 pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[200, 0, 0, 150], get_width=16, cap_rounded=True),
                 pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[255, 0, 0], get_width=8, cap_rounded=True),
-                # pickable=False para bloquear el arrastre manual de los puntos
-                pdk.Layer("ScatterplotLayer", data=puntos_mapa, get_position="[lon, lat]", get_color="color", get_line_color="border", line_width_min_pixels=1, get_radius=15, stroked=True, pickable=False)
+                pdk.Layer("ScatterplotLayer", data=puntos_mapa, get_position="[lon, lat]", get_color="color", get_line_color="border", line_width_min_pixels=1, get_radius=15, stroked=True, pickable=True)
             ]
         ))
 
