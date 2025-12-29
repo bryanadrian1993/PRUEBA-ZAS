@@ -116,17 +116,15 @@ if st.session_state.viaje_confirmado:
         pos_t = df_u[df_u['Conductor'] == dp['chof']].iloc[-1]
         lat_t, lon_t = float(pos_t['Latitud']), float(pos_t['Longitud'])
 
-        # --- SECCIÓN DEL MAPA REFINADO ---
+        # --- SECCIÓN DEL MAPA ESTILO GOOGLE MAPS ---
         st.markdown('<div class="step-header">📍 RASTREO POR CARRETERA</div>', unsafe_allow_html=True)
         camino_data = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
         
-        # Puntos de localización estilizados: Conductor Amarillo | Cliente Verde
         puntos_mapa = pd.DataFrame([
             {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "color": [34, 139, 34], "border": [255, 255, 255], "label": "Tú"},
             {"lon": lon_t, "lat": lat_t, "color": [255, 215, 0], "border": [0, 0, 0], "label": "Conductor (Taxi)"}
         ])
 
-        # Vista centrada en el CONDUCTOR
         st.pydeck_chart(pdk.Deck(
             map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
             initial_view_state=pdk.ViewState(
@@ -136,10 +134,27 @@ if st.session_state.viaje_confirmado:
                 pitch=0
             ),
             layers=[
-                # Línea de carretera ROJA [255, 0, 0]
-                pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[255, 0, 0], get_width=10),
-                
-                # Puntos de localización pequeños y profesionales (Radio 15)
+                # Línea estilo Google Maps (Borde exterior más grueso)
+                pdk.Layer(
+                    "PathLayer", 
+                    data=camino_data, 
+                    get_path="path", 
+                    get_color=[200, 0, 0, 150], # Rojo oscuro semi-transparente para el borde
+                    get_width=16,
+                    cap_rounded=True,
+                    joint_rounded=True
+                ),
+                # Línea estilo Google Maps (Línea interior principal)
+                pdk.Layer(
+                    "PathLayer", 
+                    data=camino_data, 
+                    get_path="path", 
+                    get_color=[255, 0, 0], # Rojo brillante central
+                    get_width=8,
+                    cap_rounded=True,
+                    joint_rounded=True
+                ),
+                # Puntos de localización profesionales
                 pdk.Layer(
                     "ScatterplotLayer",
                     data=puntos_mapa,
@@ -160,7 +175,6 @@ if st.session_state.viaje_confirmado:
         # --- INFORMACIÓN DEL CHOFER Y CONTACTO ---
         st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 ID: {dp["id"]}</span></div>', unsafe_allow_html=True)
         
-        # Foto del Conductor
         if dp['foto'] and "http" in dp['foto']:
             id_f = re.search(r'[-\w]{25,}', dp['foto']).group() if re.search(r'[-\w]{25,}', dp['foto']) else ""
             if id_f:
@@ -168,7 +182,6 @@ if st.session_state.viaje_confirmado:
 
         st.success(f"✅ Conductor **{dp['chof']}** asignado.")
         
-        # WhatsApp con Mapa
         msg_wa = urllib.parse.quote(f"🚖 *PEDIDO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre']}\n📍 Ref: {dp['ref']}\n🗺️ *Mapa:* {dp['mapa']}")
         st.markdown(f'<a href="https://api.whatsapp.com/send?phone={dp["t_chof"]}&text={msg_wa}" target="_blank" style="background-color:#25D366;color:white;padding:15px;text-align:center;display:block;text-decoration:none;font-weight:bold;font-size:20px;border-radius:10px;">📲 CONTACTAR CONDUCTOR</a>', unsafe_allow_html=True)
 
