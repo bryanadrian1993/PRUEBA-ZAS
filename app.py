@@ -33,7 +33,7 @@ st.markdown("""
 # --- 🛠️ FUNCIONES ---
 
 def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
-    """Consulta OSRM para trazar el camino real por calles."""
+    """Trazado real por calles con respaldo de línea recta."""
     try:
         url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
         with urllib.request.urlopen(url, timeout=4) as response:
@@ -43,10 +43,10 @@ def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
         return [{"path": [[lon1, lat1], [lon2, lat2]]}]
 
 def cargar_datos(hoja):
-    """Carga y limpia datos de Google Sheets."""
+    """Carga datos con prevención de caché."""
     try:
-        cache_buster = datetime.now().strftime("%Y%m%d%H%M%S")
-        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cache_buster}"
+        cb = datetime.now().strftime("%Y%m%d%H%M%S")
+        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cb}"
         df = pd.read_csv(url)
         df.columns = df.columns.str.strip()
         return df
@@ -102,35 +102,37 @@ if st.session_state.viaje_confirmado:
         
         st.markdown('<div class="step-header">📍 RASTREO POR CARRETERA</div>', unsafe_allow_html=True)
         
-        # 1. Datos de la Línea y los Iconos
+        # 1. Capa de Ruta Azul
         camino_real = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
-        ICON_DATA = [
-            {"pos": [dp['lon_cli'], dp['lat_cli']], "url": "https://img.icons8.com/fluency/96/person-male.png", "label": "Tú"},
-            {"pos": [lon_t, lat_t], "url": "https://img.icons8.com/color/96/taxi.png", "label": "Taxi Amarillo"}
-        ]
+        
+        # 2. Capa de Iconos (Taxi Amarillo y Persona)
+        # Usamos ScatterplotLayer porque es más estable que IconLayer para evitar pantallas blancas
+        puntos_df = pd.DataFrame([
+            {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "color": [0, 200, 0], "tag": "Tú"},
+            {"lon": lon_t, "lat": lat_t, "color": [255, 200, 0], "tag": "Taxi Amarillo"}
+        ])
 
-        # 2. Renderizado del Mapa Completo
         st.pydeck_chart(pdk.Deck(
             map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
             initial_view_state=pdk.ViewState(latitude=(dp['lat_cli']+lat_t)/2, longitude=(dp['lon_cli']+lon_t)/2, zoom=15),
             layers=[
-                pdk.Layer("PathLayer", data=camino_real, get_path="path", get_color=[0, 150, 255], get_width=12),
-                pdk.Layer("IconLayer", data=ICON_DATA, get_icon='url', get_size=4, size_scale=15, get_position='pos')
-            ]
+                pdk.Layer("PathLayer", data=camino_real, get_path="path", get_color=[0, 150, 255], get_width=15),
+                pdk.Layer("ScatterplotLayer", data=puntos_df, get_position="[lon, lat]", get_color="color", get_radius=50, pickable=True)
+            ],
+            tooltip={"text": "{tag}"}
         ))
         
         if st.button("🔄 ACTUALIZAR MAPA"): st.rerun()
 
-        # 3. Datos del Pedido y BOTÓN DE WHATSAPP RESTAURADO
+        # 3. WhatsApp y Contacto
         st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 ID: {dp["id"]}</span></div>', unsafe_allow_html=True)
         
-        mapa_link = f"https://www.google.com/maps?q={dp['lat_cli']},{dp['lon_cli']}"
-        msg_wa = urllib.parse.quote(f"🚖 *PEDIDO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre']}\n📍 Ref: {dp['ref']}\n🗺️ *Mapa:* {mapa_link}")
+        link_mapa = f"https://www.google.com/maps?q={dp['lat_cli']},{dp['lon_cli']}"
+        msg_wa = urllib.parse.quote(f"🚖 *PEDIDO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre']}\n📍 Ref: {dp['ref']}\n🗺️ *Mapa:* {link_mapa}")
         
         st.markdown(f'<a href="https://api.whatsapp.com/send?phone={dp["t_chof"]}&text={msg_wa}" target="_blank" style="background-color:#25D366;color:white;padding:15px;text-align:center;display:block;text-decoration:none;font-weight:bold;border-radius:10px;">📲 CONTACTAR CONDUCTOR</a>', unsafe_allow_html=True)
         
         if st.button("❌ NUEVO PEDIDO"):
             st.session_state.viaje_confirmado = False
             st.rerun()
-            
-    except Exception: st.info("⌛ Recibiendo señal del taxi...")
+    except: st.info("⌛ Recibiendo señal del taxi...")
