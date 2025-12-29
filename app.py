@@ -10,23 +10,21 @@ import math
 import re
 import pydeck as pdk
 
-# --- ⚙️ CONFIGURACIÓN DEL SISTEMA ---
+# --- ⚙️ CONFIGURACIÓN ---
 st.set_page_config(page_title="TAXI SEGURO", page_icon="🚖", layout="centered")
 
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbwzOVH8c8f9WEoE4OJOTIccz_EgrOpZ8ySURTVRwi0bnQhFnWVdgfX1W8ivTIu5dFfs/exec"
 LAT_BASE, LON_BASE = -0.466657, -76.989635
 
-# --- 🔄 GESTIÓN DE ESTADO ---
 if 'viaje_confirmado' not in st.session_state: st.session_state.viaje_confirmado = False
 if 'datos_pedido' not in st.session_state: st.session_state.datos_pedido = {}
 
-# 🎨 ESTILOS CSS
+# 🎨 ESTILOS
 st.markdown("""
     <style>
     .main-title { font-size: 40px; font-weight: bold; text-align: center; color: #000; margin-bottom: 0; }
     .sub-title { font-size: 25px; font-weight: bold; text-align: center; color: #E91E63; margin-top: -10px; margin-bottom: 20px; }
-    .step-header { font-size: 18px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; color: #333; }
     .stButton>button { width: 100%; height: 50px; font-weight: bold; font-size: 18px; border-radius: 10px; }
     .id-badge { background-color: #F0F2F6; padding: 5px 15px; border-radius: 20px; border: 1px solid #CCC; font-weight: bold; color: #555; display: inline-block; margin-bottom: 10px; }
     </style>
@@ -34,14 +32,16 @@ st.markdown("""
 
 # --- 🛠️ FUNCIONES ---
 
-def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
-    """Obtiene el trazado real por calles."""
+def obtener_ruta_segura(lon1, lat1, lon2, lat2):
+    """Intenta obtener la carretera, si falla devuelve línea recta."""
     try:
         url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
-        with urllib.request.urlopen(url, timeout=5) as response:
+        with urllib.request.urlopen(url, timeout=3) as response:
             data = json.loads(response.read().decode())
+            # Formato de lista de coordenadas para PathLayer
             return [{"path": data['routes'][0]['geometry']['coordinates']}]
     except:
+        # RESPALDO: Línea recta si falla el servidor
         return [{"path": [[lon1, lat1], [lon2, lat2]]}]
 
 def cargar_datos(hoja):
@@ -49,7 +49,7 @@ def cargar_datos(hoja):
         cache_buster = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cache_buster}"
         df = pd.read_csv(url)
-        df.columns = df.columns.str.strip() # Limpieza de columnas
+        df.columns = df.columns.str.strip()
         return df
     except: return pd.DataFrame()
 
@@ -112,16 +112,37 @@ if st.session_state.viaje_confirmado:
         lat_t, lon_t = float(pos_t['Latitud']), float(pos_t['Longitud'])
 
         st.markdown('<div class="step-header">📍 RASTREO EN TIEMPO REAL</div>', unsafe_allow_html=True)
-        datos_camino = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
+        
+        # 🛰️ OBTENER DATOS DE LA LÍNEA (Carretera o Recta)
+        ruta_data = obtener_ruta_segura(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
 
-        # CONFIGURACIÓN DE MAPA ESTÁNDAR (Sin pantalla blanca)
         st.pydeck_chart(pdk.Deck(
-            map_style='light', # Estilo claro que siempre funciona
+            map_style='light', # Fondo claro para ver carreteras
             initial_view_state=pdk.ViewState(latitude=(dp['lat_cli']+lat_t)/2, longitude=(dp['lon_cli']+lon_t)/2, zoom=14),
             layers=[
-                pdk.Layer("PathLayer", data=datos_camino, get_path="path", get_color=[0, 150, 255], get_width=15),
-                pdk.Layer("ScatterplotLayer", data=[{"p": [dp['lon_cli'], dp['lat_cli']], "c": [34, 139, 34]}, {"p": [lon_t, lat_t], "c": [220, 20, 60]}], get_position="p", get_color="c", get_radius=200)
-            ]
+                # CAPA DE LA RUTA
+                pdk.Layer(
+                    "PathLayer", 
+                    data=ruta_data, 
+                    get_path="path", 
+                    get_color=[0, 120, 255], # Azul Rey
+                    get_width=25, 
+                    width_min_pixels=5
+                ),
+                # CAPA DE PUNTOS
+                pdk.Layer(
+                    "ScatterplotLayer", 
+                    data=[
+                        {"p": [dp['lon_cli'], dp['lat_cli']], "c": [34, 139, 34], "n": "Tú"}, 
+                        {"p": [lon_t, lat_t], "c": [220, 20, 60], "n": "Taxi"}
+                    ], 
+                    get_position="p", 
+                    get_color="c", 
+                    get_radius=250,
+                    pickable=True
+                )
+            ],
+            tooltip={"text": "{n}"}
         ))
 
         if st.button("🔄 ACTUALIZAR MAPA"): st.rerun()
