@@ -17,7 +17,7 @@ SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbwzOVH8c8f9WEoE4OJOTIccz_EgrOpZ8ySURTVRwi0bnQhFnWVdgfX1W8ivTIu5dFfs/exec"
 LAT_BASE, LON_BASE = -0.466657, -76.989635
 
-# --- 🔄 GESTIÓN DE ESTADO (PERSISTENCIA) ---
+# --- 🔄 GESTIÓN DE ESTADO ---
 if 'viaje_confirmado' not in st.session_state: st.session_state.viaje_confirmado = False
 if 'datos_pedido' not in st.session_state: st.session_state.datos_pedido = {}
 
@@ -29,17 +29,16 @@ st.markdown("""
     .step-header { font-size: 18px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; color: #333; }
     .stButton>button { width: 100%; height: 50px; font-weight: bold; font-size: 18px; border-radius: 10px; }
     .id-badge { background-color: #F0F2F6; padding: 5px 15px; border-radius: 20px; border: 1px solid #CCC; font-weight: bold; color: #555; display: inline-block; margin-bottom: 10px; }
-    .footer { text-align: center; color: #888; font-size: 14px; margin-top: 50px; border-top: 1px solid #eee; padding-top: 20px; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 🛠️ FUNCIONES TÉCNICAS ---
+# --- 🛠️ FUNCIONES ---
 
 def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
-    """Obtiene las coordenadas reales de las calles usando OSRM."""
+    """Obtiene el trazado real por calles."""
     try:
         url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
-        with urllib.request.urlopen(url) as response:
+        with urllib.request.urlopen(url, timeout=5) as response:
             data = json.loads(response.read().decode())
             return [{"path": data['routes'][0]['geometry']['coordinates']}]
     except:
@@ -50,7 +49,7 @@ def cargar_datos(hoja):
         cache_buster = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cache_buster}"
         df = pd.read_csv(url)
-        df.columns = df.columns.str.strip() # Limpieza contra KeyError
+        df.columns = df.columns.str.strip() # Limpieza de columnas
         return df
     except: return pd.DataFrame()
 
@@ -62,8 +61,7 @@ def enviar_datos_a_sheets(datos):
     except: return "Error"
 
 def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
-    df_c = cargar_datos("CHOFERES")
-    df_u = cargar_datos("UBICACIONES")
+    df_c, df_u = cargar_datos("CHOFERES"), cargar_datos("UBICACIONES")
     if df_c.empty or df_u.empty: return None, None, None
     tipo_b = tipo_sol.split(" ")[0].upper()
     libres = df_c[(df_c['Estado'].astype(str).str.upper() == 'LIBRE') & (df_c['Tipo_Vehiculo'].astype(str).str.upper().str.contains(tipo_b))]
@@ -83,7 +81,6 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
 
 # --- 📱 INTERFAZ ---
 st.markdown('<div class="main-title">🚖 TAXI SEGURO</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">🌎 SERVICIO GLOBAL</div>', unsafe_allow_html=True)
 
 loc = get_geolocation()
 lat_actual, lon_actual = (loc['coords']['latitude'], loc['coords']['longitude']) if loc else (LAT_BASE, LON_BASE)
@@ -91,99 +88,47 @@ lat_actual, lon_actual = (loc['coords']['latitude'], loc['coords']['longitude'])
 if not st.session_state.viaje_confirmado:
     with st.form("form_pedido"):
         nombre_cli = st.text_input("Tu Nombre:")
-        celular = st.text_input("WhatsApp (Sin código)")
+        celular = st.text_input("WhatsApp")
         ref_cli = st.text_input("Referencia / Dirección:")
         tipo_veh = st.selectbox("¿Qué necesitas?", ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔"])
         enviar = st.form_submit_button("🚖 SOLICITAR UNIDAD")
 
     if enviar and nombre_cli and ref_cli:
-        with st.spinner("🔄 Conectando satélite y buscando unidad..."):
+        with st.spinner("🔄 Buscando unidad..."):
             chof, t_chof, foto_chof = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
             if chof:
                 id_v = f"TX-{random.randint(1000, 9999)}"
                 mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
-                
-                enviar_datos_a_sheets({
-                    "accion": "registrar_pedido", 
-                    "cliente": nombre_cli, 
-                    "referencia": ref_cli, 
-                    "conductor": chof, 
-                    "id_viaje": id_v,
-                    "mapa": mapa_url
-                })
-
+                enviar_datos_a_sheets({"accion": "registrar_pedido", "cliente": nombre_cli, "referencia": ref_cli, "conductor": chof, "id_viaje": id_v, "mapa": mapa_url})
                 st.session_state.viaje_confirmado = True
-                st.session_state.datos_pedido = {
-                    "chof": chof, "t_chof": t_chof, "foto": foto_chof,
-                    "id": id_v, "mapa": mapa_url,
-                    "lat_cli": lat_actual, "lon_cli": lon_actual,
-                    "nombre_cli": nombre_cli, "ref": ref_cli
-                }
+                st.session_state.datos_pedido = {"chof": chof, "t_chof": t_chof, "foto": foto_chof, "id": id_v, "mapa": mapa_url, "lat_cli": lat_actual, "lon_cli": lon_actual, "nombre_cli": nombre_cli, "ref": ref_cli}
                 st.rerun()
-            else: st.error("❌ No hay unidades libres.")
 
 if st.session_state.viaje_confirmado:
     dp = st.session_state.datos_pedido
-    
     try:
         df_u = cargar_datos("UBICACIONES")
         pos_t = df_u[df_u['Conductor'] == dp['chof']].iloc[-1]
         lat_t, lon_t = float(pos_t['Latitud']), float(pos_t['Longitud'])
 
-        st.markdown('<div class="step-header">🛰️ RASTREO SATELITAL EN VIVO</div>', unsafe_allow_html=True)
-        
+        st.markdown('<div class="step-header">📍 RASTREO EN TIEMPO REAL</div>', unsafe_allow_html=True)
         datos_camino = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
 
-        # --- MAPA SATELITAL REALISTA ---
+        # CONFIGURACIÓN DE MAPA ESTÁNDAR (Sin pantalla blanca)
         st.pydeck_chart(pdk.Deck(
-            map_style='mapbox://styles/mapbox/satellite-streets-v12', 
-            initial_view_state=pdk.ViewState(
-                latitude=(dp['lat_cli']+lat_t)/2, 
-                longitude=(dp['lon_cli']+lon_t)/2, 
-                zoom=16,       # Zoom alto para ver casas
-                pitch=50,      # Perspectiva 3D
-                bearing=0
-            ),
+            map_style='light', # Estilo claro que siempre funciona
+            initial_view_state=pdk.ViewState(latitude=(dp['lat_cli']+lat_t)/2, longitude=(dp['lon_cli']+lon_t)/2, zoom=14),
             layers=[
-                # Ruta Neón sobre satélite
-                pdk.Layer(
-                    "PathLayer",
-                    data=datos_camino,
-                    get_path="path",
-                    get_color=[255, 255, 0, 255], # Amarillo Neón
-                    get_width=15,
-                    width_min_pixels=5
-                ),
-                # Marcadores de precisión
-                pdk.Layer(
-                    "ScatterplotLayer", 
-                    data=[
-                        {"pos": [dp['lon_cli'], dp['lat_cli']], "col": [0, 255, 0], "nom": "Tú"},
-                        {"pos": [lon_t, lat_t], "col": [255, 0, 0], "nom": "Taxi"}
-                    ], 
-                    get_position="pos", 
-                    get_color="col", 
-                    get_radius=15,
-                    stroked=True
-                )
-            ],
-            tooltip={"text": "{nom}"}
+                pdk.Layer("PathLayer", data=datos_camino, get_path="path", get_color=[0, 150, 255], get_width=15),
+                pdk.Layer("ScatterplotLayer", data=[{"p": [dp['lon_cli'], dp['lat_cli']], "c": [34, 139, 34]}, {"p": [lon_t, lat_t], "c": [220, 20, 60]}], get_position="p", get_color="c", get_radius=200)
+            ]
         ))
 
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🔄 ACTUALIZAR MAPA"): st.rerun()
-        with col2:
-            if st.button("❌ CANCELAR PEDIDO"):
-                st.session_state.viaje_confirmado = False
-                st.rerun()
-
+        if st.button("🔄 ACTUALIZAR MAPA"): st.rerun()
         st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 ID: {dp["id"]}</span></div>', unsafe_allow_html=True)
-        
-        # WhatsApp Restaurado
-        msg_wa = urllib.parse.quote(f"🚖 *PEDIDO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre_cli']}\n📍 Ref: {dp['ref']}\n🗺️ *Mapa:* {dp['mapa']}")
+        msg_wa = urllib.parse.quote(f"🚖 *PEDIDO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre_cli']}\n📍 Ref: {dp['ref']}\n🗺️ Mapa: {dp['mapa']}")
         st.markdown(f'<a href="https://api.whatsapp.com/send?phone={dp["t_chof"]}&text={msg_wa}" target="_blank" style="background-color:#25D366;color:white;padding:15px;text-align:center;display:block;text-decoration:none;font-weight:bold;font-size:20px;border-radius:10px;">📲 CONTACTAR CONDUCTOR</a>', unsafe_allow_html=True)
-            
-    except Exception: st.info("⌛ Recibiendo señal de satélite...")
-
-st.markdown('<div class="footer"><p>© 2025 Taxi Seguro Global</p></div>', unsafe_allow_html=True)
+        if st.button("❌ NUEVO PEDIDO"):
+            st.session_state.viaje_confirmado = False
+            st.rerun()
+    except Exception: st.info("⌛ Esperando señal GPS del taxi...")
