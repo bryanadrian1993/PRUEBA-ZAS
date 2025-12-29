@@ -14,7 +14,7 @@ from streamlit_autorefresh import st_autorefresh
 # --- ⚙️ CONFIGURACIÓN DEL SISTEMA ---
 st.set_page_config(page_title="TAXI SEGURO", page_icon="🚖", layout="centered")
 
-# AUTO-REFRESCO: Actualiza la app cada 10 segundos para ver el movimiento en vivo
+# AUTO-REFRESCO: Actualiza la app cada 10 segundos para rastreo en vivo
 if st.session_state.get('viaje_confirmado', False):
     st_autorefresh(interval=10000, key="datarefresh")
 
@@ -30,7 +30,6 @@ st.markdown("""
     <style>
     .main-title { font-size: 40px; font-weight: bold; text-align: center; color: #000; margin-bottom: 0; }
     .sub-title { font-size: 25px; font-weight: bold; text-align: center; color: #E91E63; margin-top: -10px; margin-bottom: 20px; }
-    .step-header { font-size: 18px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; color: #333; }
     .stButton>button { width: 100%; height: 50px; font-weight: bold; font-size: 18px; border-radius: 10px; }
     .id-badge { background-color: #F0F2F6; padding: 5px 15px; border-radius: 20px; border: 1px solid #CCC; font-weight: bold; color: #555; display: inline-block; margin-bottom: 10px; }
     .eta-box { background-color: #FFF3E0; padding: 15px; border-radius: 10px; border-left: 5px solid #FF9800; text-align: center; margin-bottom: 15px; font-weight: bold; }
@@ -72,16 +71,18 @@ def enviar_datos_a_sheets(datos):
     except: return "Error"
 
 def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
-    df_c, df_u = cargar_datos("CHOFERES"), cargar_datos("UBICACIONES")
+    df_c = cargar_datos("CHOFERES")
+    df_u = cargar_datos("UBICACIONES")
+    
     if df_c.empty or df_u.empty: return None, None, None, "S/P"
+
+    # ✅ CORRECCIÓN: Limpiar espacios y preparar búsqueda por palabra clave (ej: "CAMIONETA")
+    tipo_busqueda = tipo_sol.split(" ")[0].upper().strip()
     
-    # ✅ MEJORA: Obtenemos solo la primera palabra (ej. "Camioneta") para buscar coincidencias
-    tipo_busqueda = tipo_sol.split(" ")[0]
-    
-    # ✅ MEJORA: Filtrado flexible que ignora emojis y mayúsculas/minúsculas
+    # ✅ CORRECCIÓN: Búsqueda flexible en columna 'Estado' y 'Tipo_Vehiculo'
     libres = df_c[
-        (df_c['Estado'].astype(str).str.contains('LIBRE', case=False, na=False)) & 
-        (df_c['Tipo_Vehiculo'].astype(str).str.contains(tipo_busqueda, case=False, na=False))
+        (df_c['Estado'].astype(str).str.upper().str.contains('LIBRE', na=False)) & 
+        (df_c['Tipo_Vehiculo'].astype(str).str.upper().str.contains(tipo_busqueda, na=False))
     ]
     
     if libres.empty: return None, None, None, "S/P"
@@ -89,29 +90,26 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
     mejor, menor = None, float('inf')
     for _, chofer in libres.iterrows():
         nom = f"{chofer['Nombre']} {chofer['Apellido']}"
-        ubi = df_u[df_u['Conductor'] == nom]
+        ubi = df_u[df_u['Conductor'].astype(str).str.strip() == nom.strip()]
         if not ubi.empty:
-            # Usar la última ubicación conocida del conductor
-            u_lat, u_lon = float(ubi.iloc[-1]['Latitud']), float(ubi.iloc[-1]['Longitud'])
-            d = math.sqrt((lat_cli - u_lat)**2 + (lon_cli - u_lon)**2)
-            if d < menor: menor, mejor = d, chofer
+            try:
+                # Obtener la última posición registrada
+                c_lat = float(ubi.iloc[-1]['Latitud'])
+                c_lon = float(ubi.iloc[-1]['Longitud'])
+                d = calcular_distancia_real(lat_cli, lon_cli, c_lat, c_lon)
+                if d < menor:
+                    menor, mejor = d, chofer
+            except: continue
             
     if mejor is not None:
         t_original = str(mejor['Telefono']).split(".")[0]
         t_limpio = re.sub(r'\D', '', t_original)
-        pais = str(mejor.get('Pais', 'Ecuador'))
-        prefijos = {"Ecuador": "593", "Colombia": "57", "Perú": "51", "México": "52"}
-        cod = prefijos.get(pais, "593")
-        
-        if pais == "Ecuador" and t_limpio.startswith("09"): final_phone = cod + t_limpio[1:]
-        elif t_limpio.startswith(cod): final_phone = t_limpio
-        else: final_phone = cod + t_limpio
-        
         placa = str(mejor.get('Placa', 'S/P'))
-        return f"{mejor['Nombre']} {mejor['Apellido']}", final_phone, str(mejor['Foto_Perfil']), placa
+        return f"{mejor['Nombre']} {mejor['Apellido']}", t_limpio, str(mejor['Foto_Perfil']), placa
+    
     return None, None, None, "S/P"
 
-# --- 📱 INTERFAZ PRINCIPAL ---
+# --- 📱 INTERFAZ ---
 st.markdown('<div class="main-title">🚖 TAXI SEGURO</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">🌎 SERVICIO GLOBAL</div>', unsafe_allow_html=True)
 
@@ -136,21 +134,17 @@ if not st.session_state.viaje_confirmado:
                 st.session_state.viaje_confirmado = True
                 st.session_state.datos_pedido = {"chof": chof, "t_chof": t_chof, "foto": foto_chof, "placa": placa, "id": id_v, "mapa": mapa_url, "lat_cli": lat_actual, "lon_cli": lon_actual, "nombre": nombre_cli, "ref": ref_cli}
                 st.rerun()
-            else: st.error("❌ No hay unidades libres de este tipo.")
+            else:
+                st.error("❌ No hay unidades libres de este tipo en este momento.")
 
 if st.session_state.viaje_confirmado:
     dp = st.session_state.datos_pedido
     try:
         df_u = cargar_datos("UBICACIONES")
-        pos_t = df_u[df_u['Conductor'] == dp['chof']].iloc[-1]
+        pos_t = df_u[df_u['Conductor'].astype(str).str.strip() == dp['chof'].strip()].iloc[-1]
         lat_t, lon_t = float(pos_t['Latitud']), float(pos_t['Longitud'])
 
         st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 ID: {dp["id"]}</span></div>', unsafe_allow_html=True)
-        
-        if dp['foto'] and "http" in dp['foto']:
-            id_f = re.search(r'[-\w]{25,}', dp['foto']).group() if re.search(r'[-\w]{25,}', dp['foto']) else ""
-            if id_f: st.markdown(f'<div style="text-align:center; margin-bottom:15px;"><img src="https://lh3.googleusercontent.com/d/{id_f}" style="width:130px;height:130px;border-radius:50%;object-fit:cover;border:4px solid #FF9800;"></div>', unsafe_allow_html=True)
-
         st.success(f"✅ Conductor **{dp['chof']}** asignado.")
 
         msg_wa = urllib.parse.quote(f"🚖 *PEDIDO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre']}\n📍 Ref: {dp['ref']}\n🗺️ *Mapa:* {dp['mapa']}")
@@ -161,28 +155,18 @@ if st.session_state.viaje_confirmado:
             st.rerun()
 
         dist_km = calcular_distancia_real(lat_t, lon_t, dp['lat_cli'], dp['lon_cli'])
-        tiempo_min = round((dist_km / 30) * 60) + 2 
-        txt_eta = f"Llega en aprox. {tiempo_min} min" if tiempo_min > 1 else "¡Llegando!"
-        st.markdown(f'<div class="eta-box">🕒 {txt_eta} ({dist_km:.2f} km)</div>', unsafe_allow_html=True)
+        st.info(f"📍 El conductor está a {dist_km:.2f} km de tu ubicación.")
         
-        camino_data = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
-        puntos_mapa = pd.DataFrame([
-            {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "color": [34, 139, 34], "info": "👤 TÚ"},
-            {"lon": lon_t, "lat": lat_t, "color": [255, 215, 0], "info": f"🚖 {dp['chof']}\n🏷️ PLACA: {dp['placa']}"}
+        # Mapa con PyDeck
+        puntos = pd.DataFrame([
+            {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "color": [0, 255, 0], "info": "TÚ"},
+            {"lon": lon_t, "lat": lat_t, "color": [255, 0, 0], "info": dp['chof']}
         ])
-
         st.pydeck_chart(pdk.Deck(
-            map_style='mapbox://styles/mapbox/light-v10',
-            initial_view_state=pdk.ViewState(latitude=lat_t, longitude=lon_t, zoom=14, pitch=0),
-            tooltip={"text": "{info}"},
-            layers=[
-                pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[255, 0, 0], get_width=5),
-                pdk.Layer("ScatterplotLayer", data=puntos_mapa, get_position="[lon, lat]", get_color="color", get_radius=30, pickable=True)
-            ]
+            initial_view_state=pdk.ViewState(latitude=lat_t, longitude=lon_t, zoom=14),
+            layers=[pdk.Layer("ScatterplotLayer", data=puntos, get_position="[lon, lat]", get_color="color", get_radius=50)]
         ))
 
-        if st.button("🔄 ACTUALIZAR UBICACIÓN"): st.rerun()
+    except Exception: st.info("⌛ Esperando actualización de GPS del conductor...")
 
-    except Exception: st.info("⌛ Recibiendo coordenadas del taxi para rastreo en vivo...")
-
-st.markdown('<div class="footer"><p>© 2025 Taxi Seguro Global<br>Contacto: taxi-seguro-world@hotmail.com</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="footer"><p>© 2025 Taxi Seguro Global</p></div>', unsafe_allow_html=True)
