@@ -14,7 +14,7 @@ from streamlit_autorefresh import st_autorefresh
 # --- ⚙️ CONFIGURACIÓN DEL SISTEMA ---
 st.set_page_config(page_title="TAXI SEGURO", page_icon="🚖", layout="centered")
 
-# AUTO-REFRESCO: Esto hace que la app se actualice sola cada 10 segundos para ver el movimiento en vivo
+# AUTO-REFRESCO: Actualiza la app cada 10 segundos para ver el movimiento en vivo
 if st.session_state.get('viaje_confirmado', False):
     st_autorefresh(interval=10000, key="datarefresh")
 
@@ -40,6 +40,7 @@ st.markdown("""
 # --- 🛠️ FUNCIONES ---
 
 def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
+    """Consulta OSRM para trazar el camino por las calles."""
     try:
         url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
         with urllib.request.urlopen(url, timeout=4) as response:
@@ -77,9 +78,23 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
         if not ubi.empty:
             d = math.sqrt((lat_cli-float(ubi.iloc[-1]['Latitud']))**2 + (lon_cli-float(ubi.iloc[-1]['Longitud']))**2)
             if d < menor: menor, mejor = d, chofer
+    
     if mejor is not None:
+        # --- 🌍 LÓGICA DE PAÍS DINÁMICA ---
         t = str(mejor['Telefono']).split(".")[0]
-        if t.startswith("09"): t = "593" + t[1:]
+        pais_chofer = str(mejor.get('Pais', 'Ecuador'))
+        
+        prefijos = {
+            "Ecuador": "593", "Colombia": "57", "Perú": "51", "México": "52",
+            "España": "34", "Estados Unidos": "1", "Argentina": "54", "Brasil": "55", "Chile": "56"
+        }
+        cod = prefijos.get(pais_chofer, "593")
+        
+        if pais_chofer == "Ecuador" and t.startswith("09"):
+            t = cod + t[1:]
+        elif not t.startswith(cod):
+            t = cod + t
+            
         return f"{mejor['Nombre']} {mejor['Apellido']}", t, str(mejor['Foto_Perfil'])
     return None, None, None
 
@@ -113,7 +128,6 @@ if not st.session_state.viaje_confirmado:
 if st.session_state.viaje_confirmado:
     dp = st.session_state.datos_pedido
     try:
-        # Cargamos ubicación fresca del conductor para el movimiento en vivo
         df_u = cargar_datos("UBICACIONES")
         pos_t = df_u[df_u['Conductor'] == dp['chof']].iloc[-1]
         lat_t, lon_t = float(pos_t['Latitud']), float(pos_t['Longitud'])
@@ -126,37 +140,23 @@ if st.session_state.viaje_confirmado:
             {"lon": lon_t, "lat": lat_t, "color": [255, 215, 0], "border": [0, 0, 0], "label": "Conductor (Taxi)"}
         ])
 
-        # Mapa centrado en el taxi para ver cómo se acerca
+        # Mapa centrado en el taxi con línea roja estilo Google Maps
         st.pydeck_chart(pdk.Deck(
             map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
-            initial_view_state=pdk.ViewState(
-                latitude=lat_t, 
-                longitude=lon_t, 
-                zoom=15, 
-                pitch=0
-            ),
+            initial_view_state=pdk.ViewState(latitude=lat_t, longitude=lon_t, zoom=15, pitch=0),
             layers=[
-                # Línea estilo Google Maps (Doble capa roja)
+                # Capa inferior (Sombra/Borde de la ruta)
                 pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[200, 0, 0, 150], get_width=16, cap_rounded=True),
+                # Capa superior (Línea Roja Principal)
                 pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[255, 0, 0], get_width=8, cap_rounded=True),
-                
-                # Puntos pequeños
-                pdk.Layer(
-                    "ScatterplotLayer",
-                    data=puntos_mapa,
-                    get_position="[lon, lat]",
-                    get_color="color",
-                    get_line_color="border",
-                    line_width_min_pixels=1,
-                    get_radius=15, 
-                    stroked=True,
-                    pickable=True
-                )
+                # Puntos de localización
+                pdk.Layer("ScatterplotLayer", data=puntos_mapa, get_position="[lon, lat]", get_color="color", get_line_color="border", line_width_min_pixels=1, get_radius=15, stroked=True, pickable=True)
             ],
             tooltip={"text": "{label}"}
         ))
 
-        # Información del viaje
+        if st.button("🔄 ACTUALIZAR UBICACIÓN"): st.rerun()
+
         st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 ID: {dp["id"]}</span></div>', unsafe_allow_html=True)
         
         if dp['foto'] and "http" in dp['foto']:
