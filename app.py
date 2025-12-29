@@ -7,10 +7,9 @@ import urllib.request
 import json
 import random
 import math
-import re
 import pydeck as pdk
 
-# --- ⚙️ CONFIGURACIÓN DEL SISTEMA ---
+# --- ⚙️ CONFIGURACIÓN ---
 st.set_page_config(page_title="TAXI SEGURO", page_icon="🚖", layout="centered")
 
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
@@ -24,16 +23,14 @@ if 'datos_pedido' not in st.session_state: st.session_state.datos_pedido = {}
 st.markdown("""
     <style>
     .main-title { font-size: 40px; font-weight: bold; text-align: center; color: #000; margin-bottom: 0; }
-    .sub-title { font-size: 25px; font-weight: bold; text-align: center; color: #E91E63; margin-top: -10px; margin-bottom: 20px; }
     .stButton>button { width: 100%; height: 50px; font-weight: bold; font-size: 18px; border-radius: 10px; }
-    .id-badge { background-color: #F0F2F6; padding: 5px 15px; border-radius: 20px; border: 1px solid #CCC; font-weight: bold; color: #555; display: inline-block; margin-bottom: 10px; }
+    .id-badge { background-color: #F0F2F6; padding: 5px 15px; border-radius: 20px; border: 1px solid #CCC; font-weight: bold; display: inline-block; margin-bottom: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
 # --- 🛠️ FUNCIONES ---
 
 def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
-    """Trazado real por calles con respaldo de línea recta."""
     try:
         url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
         with urllib.request.urlopen(url, timeout=4) as response:
@@ -43,7 +40,6 @@ def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
         return [{"path": [[lon1, lat1], [lon2, lat2]]}]
 
 def cargar_datos(hoja):
-    """Carga datos con prevención de caché."""
     try:
         cb = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cb}"
@@ -68,8 +64,8 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
     if mejor is not None:
         t = str(mejor['Telefono']).split(".")[0]
         if t.startswith("09"): t = "593" + t[1:]
-        return f"{mejor['Nombre']} {mejor['Apellido']}", t, str(mejor['Foto_Perfil'])
-    return None, None, None
+        return f"{mejor['Nombre']} {mejor['Apellido']}", t
+    return None, None
 
 # --- 📱 INTERFAZ ---
 st.markdown('<div class="main-title">🚖 TAXI SEGURO</div>', unsafe_allow_html=True)
@@ -80,14 +76,14 @@ lat_actual, lon_actual = (loc['coords']['latitude'], loc['coords']['longitude'])
 if not st.session_state.viaje_confirmado:
     with st.form("form_pedido"):
         nombre_cli = st.text_input("Tu Nombre:")
-        ref_cli = st.text_input("Referencia")
-        tipo_veh = st.selectbox("¿Qué necesitas?", ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔"])
+        ref_cli = st.text_input("Referencia de ubicación:")
+        tipo_veh = st.selectbox("Vehículo", ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔"])
         if st.form_submit_button("🚖 SOLICITAR"):
-            chof, t_chof, foto = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
+            chof, t_chof = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
             if chof:
                 st.session_state.viaje_confirmado = True
                 st.session_state.datos_pedido = {
-                    "chof": chof, "t_chof": t_chof, "foto": foto,
+                    "chof": chof, "t_chof": t_chof,
                     "id": f"TX-{random.randint(1000, 9999)}",
                     "lat_cli": lat_actual, "lon_cli": lon_actual, "nombre": nombre_cli, "ref": ref_cli
                 }
@@ -100,39 +96,61 @@ if st.session_state.viaje_confirmado:
         pos_t = df_u[df_u['Conductor'] == dp['chof']].iloc[-1]
         lat_t, lon_t = float(pos_t['Latitud']), float(pos_t['Longitud'])
         
-        st.markdown('<div class="step-header">📍 RASTREO POR CARRETERA</div>', unsafe_allow_html=True)
-        
-        # 1. Capa de Ruta Azul
+        # 🗺️ CONFIGURACIÓN DEL MAPA CON ICONOS Y LÍNEA
         camino_real = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
         
-        # 2. Capa de Iconos (Taxi Amarillo y Persona)
-        # Usamos ScatterplotLayer porque es más estable que IconLayer para evitar pantallas blancas
-        puntos_df = pd.DataFrame([
-            {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "color": [0, 200, 0], "tag": "Tú"},
-            {"lon": lon_t, "lat": lat_t, "color": [255, 200, 0], "tag": "Taxi Amarillo"}
+        # Datos para los iconos (especificando coordenadas y tipo)
+        icon_data = pd.DataFrame([
+            {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "icon": "person", "label": "Tú"},
+            {"lon": lon_t, "lat": lat_t, "icon": "taxi", "label": "Tu Taxi"}
         ])
+
+        # Definición de los iconos
+        ICON_MAPPING = {
+            "person": {"x": 0, "y": 0, "width": 128, "height": 128, "anchorY": 128, "mask": True},
+            "taxi": {"x": 128, "y": 0, "width": 128, "height": 128, "anchorY": 128, "mask": True}
+        }
 
         st.pydeck_chart(pdk.Deck(
             map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
             initial_view_state=pdk.ViewState(latitude=(dp['lat_cli']+lat_t)/2, longitude=(dp['lon_cli']+lon_t)/2, zoom=15),
             layers=[
-                pdk.Layer("PathLayer", data=camino_real, get_path="path", get_color=[0, 150, 255], get_width=15),
-                pdk.Layer("ScatterplotLayer", data=puntos_df, get_position="[lon, lat]", get_color="color", get_radius=50, pickable=True)
-            ],
-            tooltip={"text": "{tag}"}
+                # Capa 1: Línea Azul de la Carretera
+                pdk.Layer("PathLayer", data=camino_real, get_path="path", get_color=[0, 120, 255], get_width=15),
+                
+                # Capa 2: Iconos (Usando una imagen combinada de alta confiabilidad)
+                pdk.Layer(
+                    "IconLayer",
+                    data=icon_data,
+                    get_icon='icon',
+                    icon_atlas="https://raw.githubusercontent.com/visgl/deck.gl-data/master/website/icon-atlas.png",
+                    icon_mapping=ICON_MAPPING,
+                    get_position="[lon, lat]",
+                    get_size=5,
+                    size_scale=10,
+                    pickable=True
+                )
+            ]
         ))
         
-        if st.button("🔄 ACTUALIZAR MAPA"): st.rerun()
+        if st.button("🔄 ACTUALIZAR UBICACIÓN"): st.rerun()
 
-        # 3. WhatsApp y Contacto
-        st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 ID: {dp["id"]}</span></div>', unsafe_allow_html=True)
+        # 🟢 BOTÓN DE WHATSAPP CON DATOS COMPLETOS
+        st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 Viaje: {dp["id"]}</span></div>', unsafe_allow_html=True)
         
-        link_mapa = f"https://www.google.com/maps?q={dp['lat_cli']},{dp['lon_cli']}"
-        msg_wa = urllib.parse.quote(f"🚖 *PEDIDO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre']}\n📍 Ref: {dp['ref']}\n🗺️ *Mapa:* {link_mapa}")
+        link_google = f"https://www.google.com/maps?q={dp['lat_cli']},{dp['lon_cli']}"
+        msg_wa = urllib.parse.quote(f"🚖 *NUEVO SERVICIO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre']}\n📍 Ref: {dp['ref']}\n🗺️ *Ubicación:* {link_google}")
         
-        st.markdown(f'<a href="https://api.whatsapp.com/send?phone={dp["t_chof"]}&text={msg_wa}" target="_blank" style="background-color:#25D366;color:white;padding:15px;text-align:center;display:block;text-decoration:none;font-weight:bold;border-radius:10px;">📲 CONTACTAR CONDUCTOR</a>', unsafe_allow_html=True)
+        st.markdown(f'''
+            <a href="https://api.whatsapp.com/send?phone={dp["t_chof"]}&text={msg_wa}" target="_blank" 
+               style="background-color:#25D366; color:white; padding:15px; text-align:center; display:block; text-decoration:none; font-weight:bold; border-radius:10px; font-size:20px;">
+               📲 ENVIAR UBICACIÓN POR WHATSAPP
+            </a>
+        ''', unsafe_allow_html=True)
         
-        if st.button("❌ NUEVO PEDIDO"):
+        if st.button("❌ FINALIZAR / NUEVO"):
             st.session_state.viaje_confirmado = False
             st.rerun()
-    except: st.info("⌛ Recibiendo señal del taxi...")
+
+    except Exception as e:
+        st.info("⌛ Conectando con el GPS del conductor...")
