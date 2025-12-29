@@ -181,4 +181,4 @@ if st.session_state.viaje_confirmado:
 
     except Exception: st.info("⌛ Recibiendo coordenadas del taxi para rastreo en vivo...")
 
-st.markdown('<div class="footer"><p>© 2025 Taxi Seguro Global</p></div>', unsafe_allow_html=True)
+st.markdown('<div class="footer"><p>© 2025 Taxi Seguro Global<br>Contacto: taxi-seguro-world@hotmail.com</p></div>', unsafe_allow_html=True)
