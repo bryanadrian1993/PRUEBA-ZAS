@@ -19,7 +19,7 @@ if st.session_state.get('viaje_confirmado', False):
     st_autorefresh(interval=10000, key="datarefresh")
 
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
-URL_SCRIPT = "https://script.google.com/macros/s/AKfycbzivwxOGYSA33ekluigM6o6ZwwmavUKnzmEMxBUftKYqbblGGvbbYomci2qJE8zuYZi/exec"
+URL_SCRIPT = "https://script.google.com/macros/s/AKfycbwzOVH8c8f9WEoE4OJOTIccz_EgrOpZ8ySURTVRwi0bnQhFnWVdgfX1W8ivTIu5dFfs/exec"
 LAT_BASE, LON_BASE = -0.466657, -76.989635
 
 if 'viaje_confirmado' not in st.session_state: st.session_state.viaje_confirmado = False
@@ -45,7 +45,7 @@ def calcular_distancia_real(lat1, lon1, lat2, lon2):
     R = 6371
     dlat, dlon = math.radians(lat2-lat1), math.radians(lon2-lon1)
     a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
-    # CORREGIDO: Añadido '*' faltante antes de math.atan2
+    # CORRECCIÓN DE SINTAXIS: Se añadió el operador '*' para corregir el SyntaxError
     return 2 * math.atan2(math.sqrt(a), math.sqrt(1-a)) * R
 
 def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
@@ -90,7 +90,7 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
             
     if mejor is not None:
         t_original = str(mejor['Telefono']).split(".")[0]
-        t_limpio = re.sub(r'\D', '', t_original)
+        t_limpio = re.sub(r'\D', '', t_original) # Limpieza para corregir error de URL de WhatsApp
         pais = str(mejor.get('Pais', 'Ecuador'))
         prefijos = {"Ecuador": "593", "Colombia": "57", "Perú": "51", "México": "52"}
         cod = prefijos.get(pais, "593")
@@ -140,7 +140,7 @@ if st.session_state.viaje_confirmado:
         
         if dp['foto'] and "http" in dp['foto']:
             id_f = re.search(r'[-\w]{25,}', dp['foto']).group() if re.search(r'[-\w]{25,}', dp['foto']) else ""
-            if id_f: st.markdown(f'<div style="text-align:center; margin-bottom:15px;"><img src="https://lh3.googleusercontent.com/u/0/d/{id_f}" style="width:130px;height:130px;border-radius:50%;object-fit:cover;border:4px solid #FF9800;"></div>', unsafe_allow_html=True)
+            if id_f: st.markdown(f'<div style="text-align:center; margin-bottom:15px;"><img src="https://lh3.googleusercontent.com/d/{id_f}" style="width:130px;height:130px;border-radius:50%;object-fit:cover;border:4px solid #FF9800;"></div>', unsafe_allow_html=True)
 
         st.success(f"✅ Conductor **{dp['chof']}** asignado.")
 
@@ -155,8 +155,8 @@ if st.session_state.viaje_confirmado:
         # --- 3. CAJA DE TIEMPO (ETA) ---
         dist_km = calcular_distancia_real(lat_t, lon_t, dp['lat_cli'], dp['lon_cli'])
         tiempo_min = round((dist_km / 30) * 60) + 2 
-        txt_eta = f"Llega en aprox. {tiempo_min} min" if tiempo_min > 1 else "¡Llegando!"
-        st.markdown(f'<div class="eta-box">🕒 {txt_eta} ({dist_km:.2f} km)</div>', unsafe_allow_html=True)
+        txt_eta = f"Llega en aprox. {tiempo_min} min ({dist_km:.2f} km)" if tiempo_min > 1 else "¡Llegando!"
+        st.markdown(f'<div class="eta-box">🕒 {txt_eta}</div>', unsafe_allow_html=True)
         
         # --- 4. MAPA (AL FINAL) ---
         camino_data = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
