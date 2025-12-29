@@ -5,6 +5,7 @@ import urllib.request
 import base64
 import math
 import os
+import re
 from datetime import datetime
 from streamlit_js_eval import get_geolocation
 
@@ -12,7 +13,7 @@ from streamlit_js_eval import get_geolocation
 TARIFA_POR_KM = 0.10        
 DEUDA_MAXIMA = 10.00        
 LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO" 
-NUMERO_DEUNA = "09XXXXXXXX" # Pon tu número de Deuna aquí
+NUMERO_DEUNA = "09XXXXXXXX" 
 
 # --- 🔗 CONFIGURACIÓN TÉCNICA ---
 st.set_page_config(page_title="Portal Conductores", page_icon="🚖", layout="centered")
@@ -35,7 +36,9 @@ def cargar_datos(hoja):
     try:
         cache_buster = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cache_buster}"
-        return pd.read_csv(url)
+        df = pd.read_csv(url)
+        df.columns = df.columns.str.strip() # Limpieza de seguridad contra KeyError
+        return df
     except: return pd.DataFrame()
 
 def enviar_datos(datos):
@@ -63,7 +66,6 @@ if st.session_state.usuario_activo:
     user_ape = st.session_state.datos_usuario['Apellido']
     fila_actual = df_fresh[(df_fresh['Nombre'] == user_nom) & (df_fresh['Apellido'] == user_ape)]
     
-    # Referencia por posición de columna para evitar KeyErrors
     km_actuales = float(fila_actual.iloc[0, 16]) if not fila_actual.empty else 0.0
     deuda_actual = float(fila_actual.iloc[0, 17]) if not fila_actual.empty else 0.0
     bloqueado = deuda_actual >= DEUDA_MAXIMA
@@ -77,32 +79,15 @@ if st.session_state.usuario_activo:
             st.markdown(f'''<a href="{LINK_PAYPAL}" target="_blank" style="text-decoration:none;"><div style="background-color:#003087;color:white;padding:12px;border-radius:10px;text-align:center;font-weight:bold;">🔵 PAYPAL</div></a>''', unsafe_allow_html=True)
         with col_p2:
             if st.button("📱 MOSTRAR QR DEUNA", use_container_width=True):
-                # 🚀 SOLUCIÓN DEFINITIVA DE IMAGEN CON BASE64
                 directorio_actual = os.path.dirname(os.path.abspath(__file__))
                 carpeta_raiz = os.path.dirname(directorio_actual)
-                
-                # Intentamos buscar en 3 lugares distintos
-                posibles_rutas = [
-                    os.path.join(carpeta_raiz, "qr_deuna.png"), # Carpeta Principal
-                    "qr_deuna.png",                            # Raíz ejecutable
-                    os.path.join(directorio_actual, "qr_deuna.png") # Dentro de pages
-                ]
-                
-                ruta_final = None
-                for r in posibles_rutas:
-                    if os.path.exists(r):
-                        ruta_final = r
-                        break
-                
+                posibles_rutas = [os.path.join(carpeta_raiz, "qr_deuna.png"), "qr_deuna.png", os.path.join(directorio_actual, "qr_deuna.png")]
+                ruta_final = next((r for r in posibles_rutas if os.path.exists(r)), None)
                 if ruta_final:
-                    # Leemos la imagen y la convertimos para mostrarla sin errores de ruta
                     with open(ruta_final, "rb") as f:
                         data = base64.b64encode(f.read()).decode()
                     st.markdown(f'<img src="data:image/png;base64,{data}" width="100%">', unsafe_allow_html=True)
-                    st.caption(f"WhatsApp: {NUMERO_DEUNA}")
-                else:
-                    st.error("❌ Archivo 'qr_deuna.png' no encontrado.")
-                    st.info(f"Ruta de búsqueda: {carpeta_raiz}")
+                else: st.error("❌ Archivo 'qr_deuna.png' no encontrado.")
 
         if st.button("🔄 YA PAGUÉ, REVISAR MI SALDO", type="primary"):
             res = enviar_datos({"accion": "registrar_pago_deuda", "nombre_completo": f"{user_nom} {user_ape}"})
@@ -144,7 +129,6 @@ if st.session_state.usuario_activo:
         st.rerun()
 
 else:
-    # --- PANTALLA INICIAL: LOGIN Y REGISTRO ---
     tab_log, tab_reg = st.tabs(["🔐 INGRESAR", "📝 REGISTRARME"])
     
     with tab_log:
@@ -167,11 +151,24 @@ else:
             r_nom = st.text_input("Nombres *")
             r_ape = st.text_input("Apellidos *")
             r_ced = st.text_input("Cédula/ID *")
+            r_eml = st.text_input("Correo Electrónico *") # Casilla de Email agregada
             r_dir = st.text_input("Dirección *")
             r_telf = st.text_input("WhatsApp (Sin código) *")
             r_pla = st.text_input("Placa *")
             r_pass1 = st.text_input("Contraseña *", type="password")
+            
             if st.form_submit_button("✅ COMPLETAR REGISTRO"):
-                if r_nom and r_pass1:
-                    res = enviar_datos({"accion": "registrar_conductor", "nombre": r_nom, "apellido": r_ape, "cedula": r_ced, "telefono": r_telf, "placa": r_pla, "clave": r_pass1})
+                if r_nom and r_ape and r_eml and r_pass1:
+                    # Se incluye el campo 'email' para que coincida con Sheets
+                    res = enviar_datos({
+                        "accion": "registrar_conductor", 
+                        "nombre": r_nom, 
+                        "apellido": r_ape, 
+                        "cedula": r_ced, 
+                        "email": r_eml, 
+                        "telefono": r_telf, 
+                        "placa": r_pla, 
+                        "clave": r_pass1
+                    })
                     st.success("¡Registro exitoso! Ve a la pestaña INGRESAR.")
+                else: st.error("⚠️ Nombre, Apellido, Email y Contraseña son obligatorios.")
