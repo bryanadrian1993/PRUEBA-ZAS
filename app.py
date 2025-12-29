@@ -132,7 +132,7 @@ if st.session_state.viaje_confirmado:
         pos_t = df_u[df_u['Conductor'] == dp['chof']].iloc[-1]
         lat_t, lon_t = float(pos_t['Latitud']), float(pos_t['Longitud'])
 
-        # ETA
+        # CÁLCULO ETA
         dist_km = calcular_distancia_real(lat_t, lon_t, dp['lat_cli'], dp['lon_cli'])
         tiempo_min = round((dist_km / 30) * 60) + 2 
         txt_eta = f"Llega en aprox. {tiempo_min} min" if tiempo_min > 1 else "¡Llegando!"
@@ -140,26 +140,43 @@ if st.session_state.viaje_confirmado:
         
         camino_data = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
         
+        # Puntos de localización con la VENTANA FLOTANTE activa
         puntos_mapa = pd.DataFrame([
-            {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "color": [34, 139, 34], "border": [255, 255, 255], "info": "👤 TÚ"},
-            {"lon": lon_t, "lat": lat_t, "color": [255, 215, 0], "border": [0, 0, 0], "info": f"🚖 {dp['chof']}\n🏷️ PLACA: {dp['placa']}"}
+            {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "color": [34, 139, 34], "border": [255, 255, 255], "info": "👤 TÚ (Punto de Encuentro)"},
+            {"lon": lon_t, "lat": lat_t, "color": [255, 215, 0], "border": [0, 0, 0], "info": f"🚖 CONDUCTOR: {dp['chof']}\n🏷️ PLACA: {dp['placa']}"}
         ])
 
-        # MAPA: Centrado en taxi, línea roja estilo Google y puntos bloqueados (pickable=False)
+        # MAPA: Re-centrado automático al conductor cada vez que carga
         st.pydeck_chart(pdk.Deck(
             map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
-            initial_view_state=pdk.ViewState(latitude=lat_t, longitude=lon_t, zoom=15, pitch=0),
-            tooltip={"text": "{info}"},
+            initial_view_state=pdk.ViewState(
+                latitude=lat_t, 
+                longitude=lon_t, 
+                zoom=15, 
+                pitch=0
+            ),
+            tooltip={"text": "{info}"}, # RESTAURADO TOOLTIP
             layers=[
-                # Doble capa roja (Borde + Centro)
+                # Línea Roja Estilo Google Maps
                 pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[200, 0, 0, 150], get_width=16, cap_rounded=True),
                 pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[255, 0, 0], get_width=8, cap_rounded=True),
-                # Puntos: pickable=False para bloquear cualquier intento de arrastre
-                pdk.Layer("ScatterplotLayer", data=puntos_mapa, get_position="[lon, lat]", get_color="color", get_line_color="border", line_width_min_pixels=1, get_radius=15, stroked=True, pickable=False)
+                # Puntos Bloqueados (Pequeños para evitar arrastre visual)
+                pdk.Layer(
+                    "ScatterplotLayer", 
+                    data=puntos_mapa, 
+                    get_position="[lon, lat]", 
+                    get_color="color", 
+                    get_line_color="border", 
+                    line_width_min_pixels=1, 
+                    get_radius=15, 
+                    stroked=True, 
+                    pickable=True # Necesario para el tooltip
+                )
             ]
         ))
 
-        if st.button("🔄 ACTUALIZAR UBICACIÓN"): st.rerun()
+        if st.button("🔄 ACTUALIZAR UBICACIÓN"):
+            st.rerun()
 
         st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 ID: {dp["id"]}</span></div>', unsafe_allow_html=True)
         
