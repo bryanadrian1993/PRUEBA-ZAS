@@ -7,7 +7,6 @@ import urllib.request
 import json
 import random
 import math
-import re
 import pydeck as pdk
 
 # --- ⚙️ CONFIGURACIÓN DEL SISTEMA ---
@@ -42,7 +41,7 @@ def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
         return [{"path": [[lon1, lat1], [lon2, lat2]]}]
 
 def cargar_datos(hoja):
-    """Carga y limpia datos de Google Sheets evitando el caché."""
+    """Carga y limpia datos de Google Sheets."""
     try:
         cb = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cb}"
@@ -52,7 +51,6 @@ def cargar_datos(hoja):
     except: return pd.DataFrame()
 
 def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
-    """Búsqueda del conductor más cercano en la base de datos."""
     df_c, df_u = cargar_datos("CHOFERES"), cargar_datos("UBICACIONES")
     if df_c.empty or df_u.empty: return None, None
     tipo_b = tipo_sol.split(" ")[0].upper()
@@ -81,8 +79,8 @@ if not st.session_state.viaje_confirmado:
     with st.form("form_pedido"):
         nombre_cli = st.text_input("Tu Nombre:")
         ref_cli = st.text_input("Referencia de ubicación:")
-        tipo_veh = st.selectbox("Vehículo", ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔"])
-        if st.form_submit_button("🚖 SOLICITAR"):
+        tipo_veh = st.selectbox("¿Qué necesitas?", ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔"])
+        if st.form_submit_button("🚖 SOLICITAR UNIDAD"):
             chof, t_chof = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
             if chof:
                 st.session_state.viaje_confirmado = True
@@ -100,62 +98,66 @@ if st.session_state.viaje_confirmado:
         pos_t = df_u[df_u['Conductor'] == dp['chof']].iloc[-1]
         lat_t, lon_t = float(pos_t['Latitud']), float(pos_t['Longitud'])
         
-        # 🟢 DATOS DE RUTA E ICONOS
+        st.markdown('<div style="text-align:center; font-weight:bold; color:#333;">📍 RASTREO POR CARRETERA</div>', unsafe_allow_html=True)
+        
+        # 🟢 DATOS DEL MAPA (ESTILO LOCALIZACIÓN)
         camino_real = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
         
-        # Configuración explícita de iconos para evitar fallos de carga
-        icon_data = [
-            {
-                "pos": [dp['lon_cli'], dp['lat_cli']],
-                "icon_url": "https://img.icons8.com/fluency/96/person-male.png",
-                "label": "Tú"
-            },
-            {
-                "pos": [lon_t, lat_t],
-                "icon_url": "https://img.icons8.com/color/96/taxi.png",
-                "label": "Taxi Amarillo"
-            }
-        ]
+        # Puntos de estilo localización (Círculos con bordes)
+        puntos_df = pd.DataFrame([
+            {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "color": [34, 139, 34], "border": [255, 255, 255], "tag": "📍 TÚ"},
+            {"lon": lon_t, "lat": lat_t, "color": [255, 215, 0], "border": [0, 0, 0], "tag": "🚖 TAXI"}
+        ])
 
         st.pydeck_chart(pdk.Deck(
             map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
             initial_view_state=pdk.ViewState(latitude=(dp['lat_cli']+lat_t)/2, longitude=(dp['lon_cli']+lon_t)/2, zoom=15),
             layers=[
-                # Capa 1: Línea Azul (Carretera)
+                # Capa 1: Ruta Azul
                 pdk.Layer("PathLayer", data=camino_real, get_path="path", get_color=[0, 150, 255], get_width=15),
                 
-                # Capa 2: Iconos (Persona y Taxi)
+                # Capa 2: Puntos de Localización (Scatterplot con borde)
                 pdk.Layer(
-                    "IconLayer",
-                    data=icon_data,
-                    get_icon='icon_url',
-                    get_size=4,
-                    size_scale=15,
-                    get_position='pos',
+                    "ScatterplotLayer",
+                    data=puntos_df,
+                    get_position="[lon, lat]",
+                    get_color="color",
+                    get_line_color="border",
+                    line_width_min_pixels=2,
+                    get_radius=50,
+                    stroked=True,
                     pickable=True
+                ),
+                
+                # Capa 3: Etiquetas de Texto flotantes
+                pdk.Layer(
+                    "TextLayer",
+                    data=puntos_df,
+                    get_position="[lon, lat]",
+                    get_text="tag",
+                    get_size=22,
+                    get_color=[0, 0, 0],
+                    get_alignment_baseline="'bottom'"
                 )
-            ],
-            tooltip={"text": "{label}"}
+            ]
         ))
         
-        if st.button("🔄 ACTUALIZAR UBICACIÓN"): st.rerun()
+        if st.button("🔄 ACTUALIZAR MAPA"): st.rerun()
 
-        # 🟢 BOTÓN DE CONTACTO WHATSAPP
+        # 🟢 BOTÓN DE WHATSAPP
         st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 Viaje: {dp["id"]}</span></div>', unsafe_allow_html=True)
         
         link_google = f"https://www.google.com/maps?q={dp['lat_cli']},{dp['lon_cli']}"
-        msg_wa = urllib.parse.quote(f"🚖 *PEDIDO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre']}\n📍 Ref: {dp['ref']}\n🗺️ *Ubicación:* {link_google}")
+        msg_wa = urllib.parse.quote(f"🚖 *PEDIDO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre']}\n📍 Ref: {dp['ref']}\n🗺️ *Mapa:* {link_google}")
         
         st.markdown(f'''
             <a href="https://api.whatsapp.com/send?phone={dp["t_chof"]}&text={msg_wa}" target="_blank" 
                style="background-color:#25D366; color:white; padding:15px; text-align:center; display:block; text-decoration:none; font-weight:bold; border-radius:10px; font-size:20px;">
-               📲 ENVIAR UBICACIÓN POR WHATSAPP
+               📲 CONTACTAR CONDUCTOR
             </a>
         ''', unsafe_allow_html=True)
         
         if st.button("❌ FINALIZAR / NUEVO"):
             st.session_state.viaje_confirmado = False
             st.rerun()
-
-    except Exception as e:
-        st.info("⌛ Conectando con el GPS del conductor...")
+    except: st.info("⌛ Recibiendo señal del taxi...")
