@@ -50,10 +50,10 @@ def cargar_datos(hoja):
 
 def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
     df_c, df_u = cargar_datos("CHOFERES"), cargar_datos("UBICACIONES")
-    if df_c.empty or df_u.empty: return None, None, None
+    if df_c.empty or df_u.empty: return None, None
     tipo_b = tipo_sol.split(" ")[0].upper()
     libres = df_c[(df_c['Estado'].astype(str).str.upper() == 'LIBRE') & (df_c['Tipo_Vehiculo'].astype(str).str.upper().str.contains(tipo_b))]
-    if libres.empty: return None, None, None
+    if libres.empty: return None, None
     mejor, menor = None, float('inf')
     for _, chofer in libres.iterrows():
         nom = f"{chofer['Nombre']} {chofer['Apellido']}"
@@ -96,46 +96,46 @@ if st.session_state.viaje_confirmado:
         pos_t = df_u[df_u['Conductor'] == dp['chof']].iloc[-1]
         lat_t, lon_t = float(pos_t['Latitud']), float(pos_t['Longitud'])
         
-        # 🗺️ CONFIGURACIÓN DEL MAPA CON ICONOS Y LÍNEA
+        # 🗺️ RUTA POR CARRETERA
         camino_real = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
         
-        # Datos para los iconos (especificando coordenadas y tipo)
-        icon_data = pd.DataFrame([
-            {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "icon": "person", "label": "Tú"},
-            {"lon": lon_t, "lat": lat_t, "icon": "taxi", "label": "Tu Taxi"}
-        ])
-
-        # Definición de los iconos
-        ICON_MAPPING = {
-            "person": {"x": 0, "y": 0, "width": 128, "height": 128, "anchorY": 128, "mask": True},
-            "taxi": {"x": 128, "y": 0, "width": 128, "height": 128, "anchorY": 128, "mask": True}
-        }
+        # 🟢 DATOS DE ICONOS CON URLs DIRECTAS (MÁS ESTABLE)
+        ICON_DATA = [
+            {
+                "pos": [dp['lon_cli'], dp['lat_cli']],
+                "url": "https://img.icons8.com/fluency/96/person-male.png",
+                "label": "Tú"
+            },
+            {
+                "pos": [lon_t, lat_t],
+                "url": "https://img.icons8.com/color/96/taxi.png",
+                "label": "Tu Taxi Amarillo"
+            }
+        ]
 
         st.pydeck_chart(pdk.Deck(
             map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
             initial_view_state=pdk.ViewState(latitude=(dp['lat_cli']+lat_t)/2, longitude=(dp['lon_cli']+lon_t)/2, zoom=15),
             layers=[
-                # Capa 1: Línea Azul de la Carretera
+                # Capa 1: Línea Azul
                 pdk.Layer("PathLayer", data=camino_real, get_path="path", get_color=[0, 120, 255], get_width=15),
-                
-                # Capa 2: Iconos (Usando una imagen combinada de alta confiabilidad)
+                # Capa 2: Iconos Reales
                 pdk.Layer(
                     "IconLayer",
-                    data=icon_data,
-                    get_icon='icon',
-                    icon_atlas="https://raw.githubusercontent.com/visgl/deck.gl-data/master/website/icon-atlas.png",
-                    icon_mapping=ICON_MAPPING,
-                    get_position="[lon, lat]",
-                    get_size=5,
-                    size_scale=10,
+                    data=ICON_DATA,
+                    get_icon='url',
+                    get_size=4,
+                    size_scale=15,
+                    get_position='pos',
                     pickable=True
                 )
-            ]
+            ],
+            tooltip={"text": "{label}"}
         ))
         
         if st.button("🔄 ACTUALIZAR UBICACIÓN"): st.rerun()
 
-        # 🟢 BOTÓN DE WHATSAPP CON DATOS COMPLETOS
+        # 🟢 BOTÓN DE WHATSAPP CON MENSAJE COMPLETO
         st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 Viaje: {dp["id"]}</span></div>', unsafe_allow_html=True)
         
         link_google = f"https://www.google.com/maps?q={dp['lat_cli']},{dp['lon_cli']}"
@@ -144,7 +144,7 @@ if st.session_state.viaje_confirmado:
         st.markdown(f'''
             <a href="https://api.whatsapp.com/send?phone={dp["t_chof"]}&text={msg_wa}" target="_blank" 
                style="background-color:#25D366; color:white; padding:15px; text-align:center; display:block; text-decoration:none; font-weight:bold; border-radius:10px; font-size:20px;">
-               📲 ENVIAR UBICACIÓN POR WHATSAPP
+               📲 ENVIAR PEDIDO POR WHATSAPP
             </a>
         ''', unsafe_allow_html=True)
         
