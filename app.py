@@ -9,9 +9,14 @@ import random
 import math
 import re
 import pydeck as pdk
+from streamlit_autorefresh import st_autorefresh
 
 # --- ⚙️ CONFIGURACIÓN DEL SISTEMA ---
 st.set_page_config(page_title="TAXI SEGURO", page_icon="🚖", layout="centered")
+
+# AUTO-REFRESCO: Esto hace que la app se actualice sola cada 10 segundos para ver el movimiento en vivo
+if st.session_state.get('viaje_confirmado', False):
+    st_autorefresh(interval=10000, key="datarefresh")
 
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbwzOVH8c8f9WEoE4OJOTIccz_EgrOpZ8ySURTVRwi0bnQhFnWVdgfX1W8ivTIu5dFfs/exec"
@@ -35,7 +40,6 @@ st.markdown("""
 # --- 🛠️ FUNCIONES ---
 
 def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
-    """Consulta OSRM para trazar el camino por las calles."""
     try:
         url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
         with urllib.request.urlopen(url, timeout=4) as response:
@@ -45,7 +49,6 @@ def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
         return [{"path": [[lon1, lat1], [lon2, lat2]]}]
 
 def cargar_datos(hoja):
-    """Carga datos de Sheets y limpia columnas."""
     try:
         cache_buster = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cache_buster}"
@@ -55,7 +58,6 @@ def cargar_datos(hoja):
     except: return pd.DataFrame()
 
 def enviar_datos_a_sheets(datos):
-    """Registra el pedido en la base de datos."""
     try:
         params = urllib.parse.urlencode(datos)
         with urllib.request.urlopen(f"{URL_SCRIPT}?{params}") as response:
@@ -63,7 +65,6 @@ def enviar_datos_a_sheets(datos):
     except: return "Error"
 
 def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
-    """Busca el conductor libre más cercano en el Excel."""
     df_c, df_u = cargar_datos("CHOFERES"), cargar_datos("UBICACIONES")
     if df_c.empty or df_u.empty: return None, None, None
     tipo_b = tipo_sol.split(" ")[0].upper()
@@ -112,11 +113,11 @@ if not st.session_state.viaje_confirmado:
 if st.session_state.viaje_confirmado:
     dp = st.session_state.datos_pedido
     try:
+        # Cargamos ubicación fresca del conductor para el movimiento en vivo
         df_u = cargar_datos("UBICACIONES")
         pos_t = df_u[df_u['Conductor'] == dp['chof']].iloc[-1]
         lat_t, lon_t = float(pos_t['Latitud']), float(pos_t['Longitud'])
 
-        # --- SECCIÓN DEL MAPA ESTILO GOOGLE MAPS ---
         st.markdown('<div class="step-header">📍 RASTREO POR CARRETERA</div>', unsafe_allow_html=True)
         camino_data = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
         
@@ -125,6 +126,7 @@ if st.session_state.viaje_confirmado:
             {"lon": lon_t, "lat": lat_t, "color": [255, 215, 0], "border": [0, 0, 0], "label": "Conductor (Taxi)"}
         ])
 
+        # Mapa centrado en el taxi para ver cómo se acerca
         st.pydeck_chart(pdk.Deck(
             map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
             initial_view_state=pdk.ViewState(
@@ -134,27 +136,11 @@ if st.session_state.viaje_confirmado:
                 pitch=0
             ),
             layers=[
-                # Línea estilo Google Maps (Borde exterior más grueso)
-                pdk.Layer(
-                    "PathLayer", 
-                    data=camino_data, 
-                    get_path="path", 
-                    get_color=[200, 0, 0, 150], # Rojo oscuro semi-transparente para el borde
-                    get_width=16,
-                    cap_rounded=True,
-                    joint_rounded=True
-                ),
-                # Línea estilo Google Maps (Línea interior principal)
-                pdk.Layer(
-                    "PathLayer", 
-                    data=camino_data, 
-                    get_path="path", 
-                    get_color=[255, 0, 0], # Rojo brillante central
-                    get_width=8,
-                    cap_rounded=True,
-                    joint_rounded=True
-                ),
-                # Puntos de localización profesionales
+                # Línea estilo Google Maps (Doble capa roja)
+                pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[200, 0, 0, 150], get_width=16, cap_rounded=True),
+                pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[255, 0, 0], get_width=8, cap_rounded=True),
+                
+                # Puntos pequeños
                 pdk.Layer(
                     "ScatterplotLayer",
                     data=puntos_mapa,
@@ -170,9 +156,7 @@ if st.session_state.viaje_confirmado:
             tooltip={"text": "{label}"}
         ))
 
-        if st.button("🔄 ACTUALIZAR UBICACIÓN"): st.rerun()
-
-        # --- INFORMACIÓN DEL CHOFER Y CONTACTO ---
+        # Información del viaje
         st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 ID: {dp["id"]}</span></div>', unsafe_allow_html=True)
         
         if dp['foto'] and "http" in dp['foto']:
@@ -189,6 +173,6 @@ if st.session_state.viaje_confirmado:
             st.session_state.viaje_confirmado = False
             st.rerun()
             
-    except Exception: st.info("⌛ Esperando señal GPS del taxi para trazar la ruta...")
+    except Exception: st.info("⌛ Esperando señal GPS del taxi para rastreo en vivo...")
 
 st.markdown('<div class="footer"><p>© 2025 Taxi Seguro Global</p></div>', unsafe_allow_html=True)
