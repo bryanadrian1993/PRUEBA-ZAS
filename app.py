@@ -128,15 +128,15 @@ if not st.session_state.viaje_confirmado:
         with st.spinner("🔄 Buscando unidad..."):
             chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
             
+            # Validamos si se encontró conductor
             if chof is not None and not chof.empty:
-                # ALERTA: 'chof' ya es el conductor encontrado. 
-                # Accedemos directo a sus datos sin usar .iloc[0]
+                # 1. Extraemos el nombre (Acceso directo porque 'chof' es una Serie)
                 nombre_chof = f"{chof['Nombre']} {chof['Apellido']}"
                 
                 id_v = f"TX-{random.randint(1000, 9999)}"
                 mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
                 
-                # Enviamos el nombre del conductor como texto simple
+                # 2. Enviamos a Google Sheets (AQUÍ ESTABA TU ERROR DE PARÉNTESIS)
                 enviar_datos_a_sheets({
                     "accion": "registrar_pedido", 
                     "cliente": nombre_cli, 
@@ -144,14 +144,15 @@ if not st.session_state.viaje_confirmado:
                     "conductor": nombre_chof, 
                     "id_viaje": id_v, 
                     "mapa": mapa_url
+                }) 
                 
-                
+                # 3. Guardamos en sesión y recargamos
                 st.session_state.viaje_confirmado = True
                 st.session_state.datos_pedido = {
                     "chof": nombre_chof, 
                     "t_chof": t_chof, 
                     "foto": foto_chof, 
-                    "placa": placa, # Usamos la variable placa que ya venía de la función
+                    "placa": placa, 
                     "id": id_v, 
                     "mapa": mapa_url, 
                     "lat_cli": lat_actual, 
