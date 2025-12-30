@@ -81,11 +81,22 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
     if libres.empty: return None, None, None, "S/P"
     mejor, menor = None, float('inf')
     for _, chofer in libres.iterrows():
-        nom = f"{chofer['Nombre']} {chofer['Apellido']}"
-        ubi = df_u[df_u['Conductor'] == nom]
+        nom = f"{str(chofer['Nombre']).strip()} {str(chofer['Apellido']).strip()}".upper()
+        ubi = df_u[df_u['Conductor'].astype(str).str.upper().str.strip() == nom]
         if not ubi.empty:
-            d = math.sqrt((lat_cli-float(ubi.iloc[-1]['Latitud']))**2 + (lon_cli-float(ubi.iloc[-1]['Longitud']))**2)
-            if d < menor: menor, mejor = d, chofer
+            try:
+                lat_cond = float(ubi.iloc[-1]['Latitud'])
+                lon_cond = float(ubi.iloc[-1]['Longitud'])
+                d = math.sqrt((lat_cli - lat_cond)**2 + (lon_cli - lon_cond)**2)
+                if d < menor:
+                    menor = d
+                    mejor = chofer
+            except (ValueError, TypeError):
+                continue
+    if mejor is not None:
+        return mejor, None, None, "OK"
+    else:
+        return None, None, None, "S/P"
             
     if mejor is not None:
         t = str(mejor['Telefono']).split(".")[0]
