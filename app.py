@@ -132,7 +132,52 @@ if st.session_state.viaje_confirmado:
         pos_t = df_u[df_u['Conductor'] == dp['chof']].iloc[-1]
         lat_t, lon_t = float(pos_t['Latitud']), float(pos_t['Longitud'])
 
-        # --- 1. INFORMACIÓN DEL CONDUCTOR (ARRIBA) ---
+        # CÁLCULO ETA
+        dist_km = calcular_distancia_real(lat_t, lon_t, dp['lat_cli'], dp['lon_cli'])
+        tiempo_min = round((dist_km / 30) * 60) + 2 
+        txt_eta = f"Llega en aprox. {tiempo_min} min" if tiempo_min > 1 else "¡Llegando!"
+        st.markdown(f'<div class="eta-box">🕒 {txt_eta} ({dist_km:.2f} km)</div>', unsafe_allow_html=True)
+        
+        camino_data = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
+        
+        # Puntos de localización con la VENTANA FLOTANTE activa
+        puntos_mapa = pd.DataFrame([
+            {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "color": [34, 139, 34], "border": [255, 255, 255], "info": "👤 TÚ (Punto de Encuentro)"},
+            {"lon": lon_t, "lat": lat_t, "color": [255, 215, 0], "border": [0, 0, 0], "info": f"🚖 CONDUCTOR: {dp['chof']}\n🏷️ PLACA: {dp['placa']}"}
+        ])
+
+        # MAPA: Re-centrado automático al conductor cada vez que carga
+        st.pydeck_chart(pdk.Deck(
+            map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+            initial_view_state=pdk.ViewState(
+                latitude=lat_t, 
+                longitude=lon_t, 
+                zoom=15, 
+                pitch=0
+            ),
+            tooltip={"text": "{info}"}, # RESTAURADO TOOLTIP
+            layers=[
+                # Línea Roja Estilo Google Maps
+                pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[200, 0, 0, 150], get_width=16, cap_rounded=True),
+                pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[255, 0, 0], get_width=8, cap_rounded=True),
+                # Puntos Bloqueados (Pequeños para evitar arrastre visual)
+                pdk.Layer(
+                    "ScatterplotLayer", 
+                    data=puntos_mapa, 
+                    get_position="[lon, lat]", 
+                    get_color="color", 
+                    get_line_color="border", 
+                    line_width_min_pixels=1, 
+                    get_radius=15, 
+                    stroked=True, 
+                    pickable=True # Necesario para el tooltip
+                )
+            ]
+        ))
+
+        if st.button("🔄 ACTUALIZAR UBICACIÓN"):
+            st.rerun()
+
         st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 ID: {dp["id"]}</span></div>', unsafe_allow_html=True)
         
         if dp['foto'] and "http" in dp['foto']:
@@ -140,42 +185,14 @@ if st.session_state.viaje_confirmado:
             if id_f: st.markdown(f'<div style="text-align:center; margin-bottom:15px;"><img src="https://lh3.googleusercontent.com/u/0/d/{id_f}" style="width:130px;height:130px;border-radius:50%;object-fit:cover;border:4px solid #FF9800;"></div>', unsafe_allow_html=True)
 
         st.success(f"✅ Conductor **{dp['chof']}** asignado.")
-
-        # --- 2. BOTONES DE ACCIÓN (DEBAJO DE INFO CONDUCTOR) ---
+        
         msg_wa = urllib.parse.quote(f"🚖 *PEDIDO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre']}\n📍 Ref: {dp['ref']}\n🗺️ *Mapa:* {dp['mapa']}")
-        st.markdown(f'<a href="https://api.whatsapp.com/send?phone={dp["t_chof"]}&text={msg_wa}" target="_blank" style="background-color:#25D366;color:white;padding:15px;text-align:center;display:block;text-decoration:none;font-weight:bold;font-size:20px;border-radius:10px;margin-bottom:10px;">📲 CONTACTAR CONDUCTOR</a>', unsafe_allow_html=True)
+        st.markdown(f'<a href="https://api.whatsapp.com/send?phone={dp["t_chof"]}&text={msg_wa}" target="_blank" style="background-color:#25D366;color:white;padding:15px;text-align:center;display:block;text-decoration:none;font-weight:bold;font-size:20px;border-radius:10px;">📲 CONTACTAR CONDUCTOR</a>', unsafe_allow_html=True)
 
         if st.button("❌ NUEVO PEDIDO"):
             st.session_state.viaje_confirmado = False
             st.rerun()
-
-        # --- 3. CAJA DE TIEMPO (ETA) ---
-        dist_km = calcular_distancia_real(lat_t, lon_t, dp['lat_cli'], dp['lon_cli'])
-        tiempo_min = round((dist_km / 30) * 60) + 2 
-        txt_eta = f"Llega en aprox. {tiempo_min} min" if tiempo_min > 1 else "¡Llegando!"
-        st.markdown(f'<div class="eta-box">🕒 {txt_eta} ({dist_km:.2f} km)</div>', unsafe_allow_html=True)
-        
-        # --- 4. MAPA (AL FINAL) ---
-        camino_data = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
-        puntos_mapa = pd.DataFrame([
-            {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "color": [34, 139, 34], "border": [255, 255, 255], "info": "👤 TÚ"},
-            {"lon": lon_t, "lat": lat_t, "color": [255, 215, 0], "border": [0, 0, 0], "info": f"🚖 {dp['chof']}\n🏷️ PLACA: {dp['placa']}"}
-        ])
-
-        st.pydeck_chart(pdk.Deck(
-            map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
-            initial_view_state=pdk.ViewState(latitude=lat_t, longitude=lon_t, zoom=15, pitch=0),
-            tooltip={"text": "{info}"},
-            layers=[
-                pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[200, 0, 0, 150], get_width=16, cap_rounded=True),
-                pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[255, 0, 0], get_width=8, cap_rounded=True),
-                # pickable=False para bloquear el arrastre manual de los puntos
-                pdk.Layer("ScatterplotLayer", data=puntos_mapa, get_position="[lon, lat]", get_color="color", get_line_color="border", line_width_min_pixels=1, get_radius=15, stroked=True, pickable=False)
-            ]
-        ))
-
-        if st.button("🔄 ACTUALIZAR UBICACIÓN"): st.rerun()
-
+            
     except Exception: st.info("⌛ Recibiendo coordenadas del taxi para rastreo en vivo...")
 
 st.markdown('<div class="footer"><p>© 2025 Taxi Seguro Global</p></div>', unsafe_allow_html=True)
