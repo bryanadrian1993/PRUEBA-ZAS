@@ -16,7 +16,7 @@ LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO"
 # --- 🔗 CONFIGURACIÓN TÉCNICA ---
 st.set_page_config(page_title="Portal Conductores", page_icon="🚖", layout="centered")
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
-URL_SCRIPT = "https://script.google.com/macros/s/AKfycbzivwxOGYSA33ekluigM6o6ZwwmavUKnzmEMxBUftKYqbblGGvbbYomci2qJE8zuYZi/exec"
+URL_SCRIPT = "https://script.google.com/macros/s/AKfycbySLQD5AI2u9P65brItCZ1pXB3hWHRqYG3VYREtKPnkp3s-VOrao5GzKEc4BLfjZB04/exec"
 
 # --- 🔄 INICIALIZAR SESIÓN ---
 if 'usuario_activo' not in st.session_state: st.session_state.usuario_activo = False
