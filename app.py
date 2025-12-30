@@ -14,7 +14,7 @@ import pydeck as pdk
 st.set_page_config(page_title="TAXI SEGURO", page_icon="🚖", layout="centered")
 
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
-URL_SCRIPT = "https://script.google.com/macros/s/AKfycbwzOVH8c8f9WEoE4OJOTIccz_EgrOpZ8ySURTVRwi0bnQhFnWVdgfX1W8ivTIu5dFfs/exec"
+URL_SCRIPT = "https://script.google.com/macros/s/AKfycbwmdasUK1xYWaJjk-ytEAjepFazngTZ91qxhsuN0VZ0OgQmmjyZnD6nOnCNuwIL3HjD/exec"
 LAT_BASE, LON_BASE = -0.466657, -76.989635
 
 if 'viaje_confirmado' not in st.session_state: st.session_state.viaje_confirmado = False
