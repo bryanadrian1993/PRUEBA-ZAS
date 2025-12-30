@@ -129,8 +129,9 @@ if not st.session_state.viaje_confirmado:
             chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
             
             if chof is not None and not chof.empty:
-                # Extraemos el nombre para evitar enviar el objeto DataFrame completo
-                nombre_chof = f"{chof.iloc[0]['Nombre']} {chof.iloc[0]['Apellido']}"
+                # ALERTA: 'chof' ya es el conductor encontrado. 
+                # Accedemos directo a sus datos sin usar .iloc[0]
+                nombre_chof = f"{chof['Nombre']} {chof['Apellido']}"
                 
                 id_v = f"TX-{random.randint(1000, 9999)}"
                 mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
@@ -143,6 +144,23 @@ if not st.session_state.viaje_confirmado:
                     "conductor": nombre_chof, 
                     "id_viaje": id_v, 
                     "mapa": mapa_url
+                })
+                
+                st.session_state.viaje_confirmado = True
+                st.session_state.datos_pedido = {
+                    "chof": nombre_chof, 
+                    "t_chof": t_chof, 
+                    "foto": foto_chof, 
+                    "placa": placa, # Usamos la variable placa que ya venía de la función
+                    "id": id_v, 
+                    "mapa": mapa_url, 
+                    "lat_cli": lat_actual, 
+                    "lon_cli": lon_actual, 
+                    "nombre": nombre_cli
+                }
+                st.rerun()
+            else:
+                st.error("❌ No hay unidades libres en este momento.")
                 })
                 
                 st.session_state.viaje_confirmado = True
