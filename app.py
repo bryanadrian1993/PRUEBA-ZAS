@@ -107,20 +107,42 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
             except (ValueError, TypeError):
                 continue
     
-    # 3. Procesar datos si encontramos a alguien (CORREGIDO: Eliminado el return prematuro)
+    # 3. Procesar datos si encontramos a alguien (LÓGICA UNIVERSAL MEJORADA)
     if mejor is not None:
-        # Formatear teléfono para WhatsApp
-        t = str(mejor['Telefono']).split(".")[0]
-        pais = str(mejor.get('Pais', 'Ecuador'))
-        prefijos = {"Ecuador": "593", "Colombia": "57", "Perú": "51", "México": "52"}
-        cod = prefijos.get(pais, "593")
+        # --- LIMPIEZA INTELIGENTE DE TELÉFONO ---
+        # 1. Limpieza profunda: Quita .0, espacios y caracteres raros
+        raw_t = str(mejor.get('Telefono', '')).split('.')[0].strip()
+        t_limpio = re.sub(r"[^0-9+]", "", raw_t) # Deja solo números y el símbolo +
         
-        if pais == "Ecuador" and t.startswith("09"): t = cod + t[1:]
-        elif not t.startswith(cod): t = cod + t
-        
+        # 2. Validación de seguridad (si está vacío o es muy corto)
+        if len(t_limpio) < 5:
+            t = "0000000000" 
+        else:
+            # 3. Formato Inteligente Internacional
+            if t_limpio.startswith("+"):
+                t = t_limpio.replace("+", "") # WhatsApp usa el número sin el +
+            else:
+                pais = str(mejor.get('Pais', 'Ecuador')).capitalize().strip()
+                # Lista expandible de países
+                prefijos = {
+                    "Ecuador": "593", "Colombia": "57", "Perú": "51", 
+                    "México": "52", "Argentina": "54", "Chile": "56",
+                    "España": "34", "Estados Unidos": "1"
+                }
+                cod = prefijos.get(pais, "593") 
+                
+                # Regla: Si empieza con 0, lo quitamos y ponemos el prefijo
+                if t_limpio.startswith("0"):
+                    t = cod + t_limpio[1:]
+                # Regla: Si no tiene prefijo, se lo ponemos
+                elif not t_limpio.startswith(cod):
+                    t = cod + t_limpio
+                else:
+                    t = t_limpio # Ya tiene el formato correcto
+
         placa = str(mejor.get('Placa', 'S/P'))
         
-        # Devolvemos: (Fila_Chofer, Telefono_Format, Foto, Placa)
+        # Devolvemos: (Fila_Chofer, Telefono_Limpio, Foto, Placa)
         return mejor, t, str(mejor['Foto_Perfil']), placa
         
     return None, None, None, "S/P"
