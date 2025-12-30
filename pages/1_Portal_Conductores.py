@@ -26,7 +26,13 @@ if 'datos_usuario' not in st.session_state: st.session_state.datos_usuario = {}
 PAISES = ["Ecuador", "Colombia", "Perú", "México", "España", "Otro"]
 IDIOMAS = ["Español", "English"]
 VEHICULOS = ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔", "Moto Entrega 🏍️"]
-
+# --- 🛰️ CAPTURA AUTOMÁTICA DE GPS ---
+loc = get_geolocation()
+if loc and 'coords' in loc:
+    lat_actual = loc['coords']['latitude']
+    lon_actual = loc['coords']['longitude']
+else:
+    lat_actual, lon_actual = None, None
 # --- 🛠️ FUNCIONES ---
 def cargar_datos(hoja):
     try:
@@ -57,7 +63,7 @@ if st.session_state.usuario_activo:
     # Creamos el nombre completo EXACTO para sincronizar con la hoja UBICACIONES
     nombre_completo_unificado = f"{user_nom} {user_ape}".upper()
     
-    # BUSCAMOS LA FILA DEL USUARIO EN EL EXCEL (Paso necesario para leer Deuda y Estado)
+    # BUSCAMOS LA FILA DEL USUARIO EN EL EXCEL
     fila_actual = df_fresh[
         (df_fresh['Nombre'].astype(str).str.upper().str.strip() == user_nom.upper()) & 
         (df_fresh['Apellido'].astype(str).str.upper().str.strip() == user_ape.upper())
@@ -66,9 +72,10 @@ if st.session_state.usuario_activo:
     # --- LÓGICA DE ACTUALIZACIÓN DE UBICACIÓN ---
     st.subheader(f"Bienvenido, {nombre_completo_unificado}")
     
-    if st.checkbox("🛰️ ACTIVAR RASTREO GPS"):
-        try:
-            # Asegúrate de tener lat_actual y lon_actual definidas arriba en tu código
+    # Añadimos 'value=True' para que intente conectar apenas entre
+    if st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True):
+        # Usamos las variables lat_actual y lon_actual que definiste en la línea 29
+        if lat_actual and lon_actual:
             res = enviar_datos({
                 "accion": "actualizar_ubicacion",
                 "conductor": nombre_completo_unificado,
@@ -76,9 +83,10 @@ if st.session_state.usuario_activo:
                 "longitud": lon_actual
             })
             if res:
-                st.success("📍 Ubicación actualizada en tiempo real")
-        except NameError:
-            st.warning("Esperando señal de GPS...")
+                st.success(f"📍 Ubicación activa: {lat_actual}, {lon_actual}")
+        else:
+            # Esto se quita cuando das clic en 'Hecho' en el navegador
+            st.warning("🛰️ Esperando señal de GPS... Por favor, permite el acceso en tu navegador.")
     
     # --- MOSTRAR INFORMACIÓN DEL SOCIO ---
     if not fila_actual.empty:
