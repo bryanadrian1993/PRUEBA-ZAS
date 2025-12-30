@@ -128,15 +128,15 @@ if not st.session_state.viaje_confirmado:
         with st.spinner("🔄 Buscando unidad..."):
             chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
             
-            # Validamos si se encontró conductor
+            # Validamos si se encontró conductor (Juan Perez)
             if chof is not None and not chof.empty:
-                # 1. Extraemos el nombre (Acceso directo porque 'chof' es una Serie)
+                # 1. Extraemos el nombre DIRECTAMENTE (sin .iloc[0] porque ya es la fila del chofer)
                 nombre_chof = f"{chof['Nombre']} {chof['Apellido']}"
                 
                 id_v = f"TX-{random.randint(1000, 9999)}"
                 mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
                 
-                # 2. Enviamos a Google Sheets (AQUÍ ESTABA TU ERROR DE PARÉNTESIS)
+                # 2. Enviamos a Google Sheets (AQUÍ ESTABA TU ERROR, YA AGREGUÉ EL CIERRE '})')
                 enviar_datos_a_sheets({
                     "accion": "registrar_pedido", 
                     "cliente": nombre_cli, 
