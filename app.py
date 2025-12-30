@@ -161,7 +161,7 @@ if not st.session_state.viaje_confirmado:
                 st.rerun()
             else:
                 st.error("❌ No hay unidades libres en este momento.")
-                })
+                
                 
                 st.session_state.viaje_confirmado = True
                 st.session_state.datos_pedido = {
