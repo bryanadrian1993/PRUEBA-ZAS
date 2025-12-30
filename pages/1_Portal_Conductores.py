@@ -144,7 +144,7 @@ else:
                         "clave": r_pass1, 
                         "pais": r_pais, 
                         "idioma": r_idioma, 
-                        "tipo_vehiculo": r_veh
+                        "Tipo_vehiculo": r_veh
                     })
                     st.success("¡Registro exitoso! Ya puedes ingresar desde la pestaña superior.")
                 else:
