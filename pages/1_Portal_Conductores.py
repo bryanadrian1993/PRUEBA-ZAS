@@ -51,19 +51,45 @@ st.title("🚖 Portal de Socios")
 if st.session_state.usuario_activo:
     # --- PANEL DEL CONDUCTOR LOGUEADO ---
     df_fresh = cargar_datos("CHOFERES")
-    user_nom = st.session_state.datos_usuario['Nombre']
-    user_ape = st.session_state.datos_usuario['Apellido']
+    user_nom = str(st.session_state.datos_usuario['Nombre']).strip()
+    user_ape = str(st.session_state.datos_usuario['Apellido']).strip()
     
-    # Buscamos la fila actualizada en el Excel
-    fila_actual = df_fresh[(df_fresh['Nombre'].str.upper() == user_nom.upper()) & 
-                           (df_fresh['Apellido'].str.upper() == user_ape.upper())]
+    # Creamos el nombre completo EXACTO para sincronizar con la hoja UBICACIONES
+    nombre_completo_unificado = f"{user_nom} {user_ape}".upper()
     
+    # BUSCAMOS LA FILA DEL USUARIO EN EL EXCEL (Paso necesario para leer Deuda y Estado)
+    fila_actual = df_fresh[
+        (df_fresh['Nombre'].astype(str).str.upper().str.strip() == user_nom.upper()) & 
+        (df_fresh['Apellido'].astype(str).str.upper().str.strip() == user_ape.upper())
+    ]
+    
+    # --- LÓGICA DE ACTUALIZACIÓN DE UBICACIÓN ---
+    st.subheader(f"Bienvenido, {nombre_completo_unificado}")
+    
+    if st.checkbox("🛰️ ACTIVAR RASTREO GPS"):
+        try:
+            # Asegúrate de tener lat_actual y lon_actual definidas arriba en tu código
+            res = enviar_datos({
+                "accion": "actualizar_ubicacion",
+                "conductor": nombre_completo_unificado,
+                "latitud": lat_actual,
+                "longitud": lon_actual
+            })
+            if res:
+                st.success("📍 Ubicación actualizada en tiempo real")
+        except NameError:
+            st.warning("Esperando señal de GPS...")
+    
+    # --- MOSTRAR INFORMACIÓN DEL SOCIO ---
     if not fila_actual.empty:
-        # Columna R (Índice 17) es DEUDA según tu lista
+        # [cite_start]Columna R (Índice 17) es DEUDA [cite: 1]
         deuda_actual = float(fila_actual.iloc[0, 17])
-        estado_actual = str(fila_actual.iloc[0, 8]) # Columna I (Índice 8) es Estado
+        # [cite_start]Columna I (Índice 8) es Estado [cite: 1]
+        estado_actual = str(fila_actual.iloc[0, 8]) 
         
-        st.success(f"✅ Socio: **{user_nom} {user_ape}**")
+        st.info(f"Estado Actual: **{estado_actual}**")
+        st.metric("Tu Deuda Actual:", f"${deuda_actual:.2f}")
+        st.success(f"✅ Socio: **{nombre_completo_unificado}**")
         
         col_m1, col_m2 = st.columns(2)
         col_m1.metric("💸 Deuda Actual", f"${deuda_actual:.2f}")
