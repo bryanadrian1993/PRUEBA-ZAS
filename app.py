@@ -144,7 +144,7 @@ if not st.session_state.viaje_confirmado:
                     "conductor": nombre_chof, 
                     "id_viaje": id_v, 
                     "mapa": mapa_url
-                })
+                
                 
                 st.session_state.viaje_confirmado = True
                 st.session_state.datos_pedido = {
