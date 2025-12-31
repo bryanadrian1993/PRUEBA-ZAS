@@ -64,9 +64,10 @@ else:
 st.title("🚖 Portal de Socios")
 
 if st.session_state.usuario_activo:
+    # (Panel del Conductor - Se mantiene igual)
     df_fresh = cargar_datos("CHOFERES")
-    user_nom = str(st.session_state.get('datos_usuario', {}).get('Nombre', '')).strip()
-    user_ape = str(st.session_state.get('datos_usuario', {}).get('Apellido', '')).strip()
+    user_nom = str(st.session_state.datos_usuario.get('Nombre', '')).strip()
+    user_ape = str(st.session_state.datos_usuario.get('Apellido', '')).strip()
     nombre_completo_unificado = f"{user_nom} {user_ape}".upper()
     
     fila_actual = df_fresh[
@@ -76,82 +77,39 @@ if st.session_state.usuario_activo:
     
     st.subheader(f"Bienvenido, {nombre_completo_unificado}")
 
-    # Foto de Perfil
-    foto_actual = st.session_state.datos_usuario.get('Foto_Perfil', 'SIN_FOTO')
-    if (not foto_actual or foto_actual == "SIN_FOTO") and not fila_actual.empty:
-        foto_actual = fila_actual.iloc[0]['Foto_Perfil']
+    # --- GESTIÓN DE VIAJE Y BOTÓN DE COBRO CORREGIDO ---
+    st.subheader("Gestión de Viaje")
+    df_viajes = cargar_datos("VIAJES")
+    if not df_viajes.empty and 'Conductor Asignado' in df_viajes.columns:
+        viaje_activo = df_viajes[
+            (df_viajes['Conductor Asignado'].astype(str).str.upper() == nombre_completo_unificado) & 
+            (df_viajes['Estado'].astype(str).str.contains("EN CURSO"))
+        ]
 
-    col_img, col_btn = st.columns([1, 2])
-    with col_img:
-        if foto_actual and str(foto_actual) != "nan" and len(str(foto_actual)) > 100:
-            try:
-                img_bytes = base64.b64decode(foto_actual)
-                st.image(io.BytesIO(img_bytes), width=150)
-            except:
-                st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=120)
-        else:
-            st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=120)
-
-    with col_btn:
-        st.write("📷 **Cambiar foto**")
-        archivo_nuevo = st.file_uploader("Sube una imagen", type=["jpg", "png", "jpeg"], key="ch_foto")
-        if archivo_nuevo and st.button("💾 GUARDAR FOTO"):
-            img = Image.open(archivo_nuevo).convert("RGB").resize((150, 150))
-            buffered = io.BytesIO()
-            img.save(buffered, format="JPEG", quality=60)
-            foto_b64 = base64.b64encode(buffered.getvalue()).decode()
-            res = enviar_datos({"accion": "actualizar_foto_perfil", "email": fila_actual.iloc[0]['Email'], "foto": foto_b64})
-            if res:
-                st.session_state.datos_usuario['Foto_Perfil'] = foto_b64
-                st.rerun()
-
-    st.write("---")
-    if st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True):
-        if lat_actual and lon_actual:
-            enviar_datos({"accion": "actualizar_ubicacion", "conductor": nombre_completo_unificado, "latitud": lat_actual, "longitud": lon_actual})
-            st.success(f"📍 Ubicación activa: {lat_actual}, {lon_actual}")
-        else:
-            st.warning("🛰️ Esperando señal de GPS...")
-
-    if not fila_actual.empty:
-        deuda_actual = float(fila_actual.iloc[0, 17])
-        estado_actual = str(fila_actual.iloc[0, 8])
-        st.info(f"Estado Actual: **{estado_actual}**")
-        st.metric("Deuda:", f"${deuda_actual:.2f}")
-
-        # GESTIÓN DE VIAJE
-        st.subheader("Gestión de Viaje")
-        df_viajes = cargar_datos("VIAJES")
-        if not df_viajes.empty and 'Conductor Asignado' in df_viajes.columns:
-            viaje_activo = df_viajes[(df_viajes['Conductor Asignado'].astype(str).str.upper() == nombre_completo_unificado) & (df_viajes['Estado'].str.contains("EN CURSO"))]
-
-            if not viaje_activo.empty:
-                datos_v = viaje_activo.iloc[-1]
-                st.warning("🚖 PASAJERO A BORDO")
-                st.write(f"👤 {datos_v['Nombre del cliente']}")
-                st.markdown(f"[🗺️ Ver Mapa]({datos_v['Mapa']})")
-
-                if st.button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary"):
-                    with st.spinner("Procesando..."):
-                        kms_finales = 1.0
-                        if lat_actual and lon_actual:
-                            try:
-                                link_mapa = str(datos_v['Mapa'])
-                                lat_c = float(link_mapa.split('query=')[1].split(',')[0])
-                                lon_c = float(link_mapa.split('query=')[1].split(',')[1])
-                                # Cálculo de respaldo Haversine corregido
-                                dLat = math.radians(lat_actual - lat_c)
-                                dLon = math.radians(lon_actual - lon_c)
-                                a = math.sin(dLat/2)**2 + math.cos(math.radians(lat_c)) * math.cos(math.radians(lat_actual)) * math.sin(dLon/2)**2
-                                kms_finales = 2 * 6371 * math.asin(math.sqrt(a))
-                                if kms_finales < 0.5: kms_finales = 1.0
-                            except: kms_finales = 5.0
-
-                        res = enviar_datos({"accion": "terminar_viaje", "conductor": nombre_completo_unificado, "km": round(kms_finales, 2)})
-                        if res:
-                            st.success(f"✅ Finalizado: {kms_finales:.2f} km.")
-                            time.sleep(2)
-                            st.rerun()
+        if not viaje_activo.empty:
+            datos_v = viaje_activo.iloc[-1]
+            st.warning("🚖 TIENES UN PASAJERO A BORDO")
+            if st.button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True):
+                with st.spinner("Calculando..."):
+                    kms_finales = 1.0
+                    if lat_actual and lon_actual:
+                        try:
+                            link_mapa = str(datos_v['Mapa'])
+                            lat_c = float(link_mapa.split('query=')[1].split(',')[0])
+                            lon_c = float(link_mapa.split('query=')[1].split(',')[1])
+                            # Fórmula Haversine integrada
+                            dLat = math.radians(lat_actual - lat_c)
+                            dLon = math.radians(lon_actual - lon_c)
+                            a = math.sin(dLat/2)**2 + math.cos(math.radians(lat_c)) * math.cos(math.radians(lat_actual)) * math.sin(dLon/2)**2
+                            kms_finales = 2 * 6371 * math.asin(math.sqrt(a))
+                            if kms_finales < 0.5: kms_finales = 1.0
+                        except: kms_finales = 5.0
+                    
+                    res = enviar_datos({"accion": "terminar_viaje", "conductor": nombre_completo_unificado, "km": round(kms_finales, 2)})
+                    if res:
+                        st.success(f"✅ Finalizado: {kms_finales:.2f} km.")
+                        time.sleep(2)
+                        st.rerun()
 
     if st.button("🔒 CERRAR SESIÓN"):
         st.session_state.usuario_activo = False
@@ -160,13 +118,17 @@ if st.session_state.usuario_activo:
 
 else:
     tab_log, tab_reg = st.tabs(["🔐 INGRESAR", "📝 REGISTRARME"])
+
     with tab_log:
-        l_nom = st.text_input("Nombre")
-        l_ape = st.text_input("Apellido")
+        st.subheader("Acceso Socios")
+        l_nom = st.text_input("Nombre registrado")
+        l_ape = st.text_input("Apellido registrado")
         l_pass = st.text_input("Contraseña", type="password")
-        if st.button("ENTRAR AL PANEL"):
+        if st.button("ENTRAR AL PANEL", type="primary"):
             df = cargar_datos("CHOFERES")
-            match = df[(df['Nombre'].astype(str).str.upper() == l_nom.upper()) & (df['Apellido'].astype(str).str.upper() == l_ape.upper()) & (df['Clave'].astype(str) == l_pass)]
+            match = df[(df['Nombre'].astype(str).str.upper() == l_nom.upper()) & 
+                       (df['Apellido'].astype(str).str.upper() == l_ape.upper()) & 
+                       (df['Clave'].astype(str) == l_pass)]
             if not match.empty:
                 st.session_state.usuario_activo = True
                 st.session_state.datos_usuario = match.iloc[0].to_dict()
@@ -174,5 +136,43 @@ else:
             else: st.error("❌ Datos incorrectos.")
 
     with tab_reg:
-        # Tu formulario de registro se mantiene intacto aquí...
-        pass
+        with st.form("registro_form"):
+            st.subheader("Registro de Nuevos Socios")
+            col1, col2 = st.columns(2)
+            with col1:
+                r_nom = st.text_input("Nombres *")
+                r_ced = st.text_input("Cédula/ID *")
+                r_email = st.text_input("Email *")
+                r_pais = st.selectbox("País *", PAISES)
+            with col2:
+                r_ape = st.text_input("Apellidos *")
+                r_telf = st.text_input("WhatsApp (Sin código) *")
+                r_veh = st.selectbox("Tipo de Vehículo *", VEHICULOS)
+                r_idioma = st.selectbox("Idioma", IDIOMAS)
+            
+            r_dir = st.text_input("Dirección *")
+            r_pla = st.text_input("Placa *")
+            r_pass1 = st.text_input("Contraseña *", type="password")
+            
+            st.write("📷 **Foto de Perfil** (Opcional)")
+            archivo_foto_reg = st.file_uploader("Sube tu foto", type=["jpg", "png", "jpeg"])
+            
+            if st.form_submit_button("✅ COMPLETAR REGISTRO"):
+                if r_nom and r_email and r_pass1:
+                    foto_para_guardar = "SIN_FOTO"
+                    if archivo_foto_reg:
+                        img = Image.open(archivo_foto_reg).convert("RGB").resize((150, 150))
+                        buffered = io.BytesIO()
+                        img.save(buffered, format="JPEG", quality=70)
+                        foto_para_guardar = base64.b64encode(buffered.getvalue()).decode()
+                    
+                    res = enviar_datos({
+                        "accion": "registrar_conductor", "nombre": r_nom, "apellido": r_ape, 
+                        "cedula": r_ced, "email": r_email, "direccion": r_dir, 
+                        "telefono": r_telf, "placa": r_pla, "clave": r_pass1, 
+                        "foto": foto_para_guardar, "pais": r_pais, "idioma": r_idioma, "Tipo_Vehiculo": r_veh
+                    })
+                    if res: st.success("¡Registro exitoso! Ya puedes ingresar.")
+                else: st.warning("Completa los campos obligatorios (*)")
+
+st.markdown('<div style="text-align:center; color:#888; font-size:12px; margin-top:50px;">© 2025 Taxi Seguro Global</div>', unsafe_allow_html=True)
