@@ -38,14 +38,15 @@ def cargar_datos(hoja):
     try:
         cb = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cb}"
-        df = pd.read_csv(url)
         
-        # 👇 ESTA ES LA LÍNEA MÁGICA QUE TE FALTA 👇
-        df.columns = df.columns.str.strip() 
-        # 👆 Esto borra los espacios invisibles ("Estado " -> "Estado")
+        # AQUÍ ESTÁ EL CAMBIO CLAVE: Agregamos engine='python'
+        df = pd.read_csv(url, engine='python', on_bad_lines='skip')
         
+        df.columns = df.columns.str.strip() # Limpiamos espacios
         return df
-    except: return pd.DataFrame()
+    except Exception as e: 
+        st.error(f"Error leyendo {hoja}: {e}")
+        return pd.DataFrame()
 
 def enviar_datos(datos):
     try:
