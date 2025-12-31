@@ -118,36 +118,9 @@ with tab2:
         df_mapa['lat'] = df_mapa['Latitud'].apply(limpiar_coordenada)
         df_mapa['lon'] = df_mapa['Longitud'].apply(limpiar_coordenada)
         df_mapa = df_mapa.dropna(subset=['lat', 'lon'])
-        
-        if not df_mapa.empty:
-            st.caption(f"📍 Mostrando {len(df_mapa)} unidades activas en el mapa.")
-            
-            view_state = pdk.ViewState(
-                latitude=df_mapa['lat'].mean(),
-                longitude=df_mapa['lon'].mean(),
-                zoom=12,
-                pitch=0
-            )
-
-            layer = pdk.Layer(
-                "ScatterplotLayer",
-                data=df_mapa,
-                get_position='[lon, lat]',
-                get_color='[225, 30, 30, 200]', 
-                get_radius=500, 
-                pickable=True
-            )
-
-            # --- RENDERIZADO FINAL ---
+        # --- RENDERIZADO DEL MAPA ÚNICO ---
             st.pydeck_chart(pdk.Deck(
                 map_style=None,
-                initial_view_state=view_state,
-                layers=[layer],
-                tooltip={"text": "Conductor: {Conductor}"}
-            ))
-
-            st.pydeck_chart(pdk.Deck(
-                map_style=None, # Estilo automático para evitar errores de carga
                 initial_view_state=view_state,
                 layers=[layer],
                 tooltip={"text": "Conductor: {Conductor}\nÚltima señal: {Hora}"}
@@ -155,29 +128,11 @@ with tab2:
             
             with st.expander("🔍 Ver registro técnico de GPS"):
                 st.dataframe(df_gps)
-
-            layer = pdk.Layer(
-                "ScatterplotLayer",
-                data=df_mapa,
-                get_position='[lon, lat]',
-                get_color='[255, 0, 0, 200]', 
-                get_radius=100, 
-                pickable=True
-            )
-
-            st.pydeck_chart(pdk.Deck(
-                map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json', 
-                initial_view_state=view_state,
-                layers=[layer],
-                tooltip={"text": "{Conductor}\nÚltima señal: {Hora}"}
-            ))
-            
-            with st.expander("Ver datos crudos de GPS"):
-                st.dataframe(df_gps)
         else:
-            st.warning("⚠️ Hay datos de GPS, pero las coordenadas parecen inválidas o están fuera de rango.")
+            st.warning("⚠️ Hay datos de GPS, pero no tienen el formato correcto para mostrarse.")
     else:
-        st.info("Sin señal GPS. Esperando a que los conductores se conecten...")
+        st.info("Sin señal GPS. Esperando a que los conductores activen su rastreo...")
+        
 
 # --- TAB 3: HISTORIAL (NUEVO) ---
 with tab3:
