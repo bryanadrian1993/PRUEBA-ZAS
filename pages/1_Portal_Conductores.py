@@ -26,7 +26,6 @@ from streamlit_javascript import st_javascript
 import json
 
 def gestionar_autologin():
-    # Intentamos recuperar los datos del almacenamiento local del navegador
     user_data = st_javascript("localStorage.getItem('user_taxi_seguro');")
     if user_data and user_data != "null":
         try:
