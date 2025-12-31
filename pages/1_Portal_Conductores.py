@@ -123,8 +123,6 @@ if st.session_state.usuario_activo:
         
         # 1. Consultamos la hoja VIAJES
         df_viajes = cargar_datos("VIAJES")
-        st.write("🔍 LAS COLUMNAS SON:", df_viajes.columns.tolist())
-        # ----------------------------------------------
         viaje_activo = pd.DataFrame() 
 
         # 2. Filtramos: ¿Existe un viaje "EN CURSO" para este conductor?
