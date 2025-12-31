@@ -1,12 +1,9 @@
-import streamlit as st
-import pandas as pd
-import urllib.parse
-import urllib.request
-import base64
-import math
-import os
-import time
-import io                      
-from PIL import Image       
-from datetime import datetime
-from streamlit_js_eval import get_geolocation
+streamlit
+pandas
+st-gsheets-connection
+streamlit-js-eval
+pydeck
+streamlit-autorefresh
+Pillow
+requests
+streamlit-javascript
