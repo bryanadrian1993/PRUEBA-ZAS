@@ -36,16 +36,20 @@ else:
 # --- 🛠️ FUNCIONES ---
 def cargar_datos(hoja):
     try:
-        cb = datetime.now().strftime("%Y%m%d%H%M%S")
-        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cb}"
+        # CAMBIO CLAVE: Usamos 'export?format=csv' en lugar de 'gviz/tq'
+        # Esto fuerza a Google a darnos un CSV limpio y ordenado.
+        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&sheet={hoja}"
         
-        # AQUÍ ESTÁ EL CAMBIO CLAVE: Agregamos engine='python'
-        df = pd.read_csv(url, engine='python', on_bad_lines='skip')
+        # Leemos el CSV directamente
+        df = pd.read_csv(url)
         
-        df.columns = df.columns.str.strip() # Limpiamos espacios
+        # Limpieza de espacios en los títulos
+        df.columns = df.columns.str.strip()
+        
         return df
-    except Exception as e: 
-        st.error(f"Error leyendo {hoja}: {e}")
+    except Exception as e:
+        # Si falla, mostramos el error pero no rompemos la app
+        st.error(f"Error cargando {hoja}: {e}")
         return pd.DataFrame()
 
 def enviar_datos(datos):
