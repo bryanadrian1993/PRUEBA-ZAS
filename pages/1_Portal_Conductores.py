@@ -284,7 +284,8 @@ if st.session_state.usuario_activo:
             st.write("Cargando datos...")    
     
     if st.button("🔒 CERRAR SESIÓN"):
-        st_javascript("localStorage.removeItem('user_taxi_seguro');")
+        # Borramos el rastro del navegador para que pida clave la próxima vez
+        st_javascript("localStorage.removeItem('user_taxi_euro');")
         st.session_state.usuario_activo = False
         st.rerun()
     st.stop()
@@ -306,7 +307,6 @@ else:
             match = df[(df['Nombre'].astype(str).str.upper() == l_nom.upper()) & 
                        (df['Apellido'].astype(str).str.upper() == l_ape.upper()) & 
                        (df['Clave'].astype(str) == l_pass)]
-            
             if not match.empty:
             datos = match.iloc[0].to_dict()
             st.session_state.usuario_activo = True
@@ -320,6 +320,7 @@ else:
                 pass
             
             st.rerun()
+            
             else:
                 st.error("❌ Datos incorrectos o usuario no encontrado.")
     st.markdown("---") 
