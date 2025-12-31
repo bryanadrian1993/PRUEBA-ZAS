@@ -257,3 +257,17 @@ else:
                     st.warning("Por favor, completa los campos obligatorios (*)")
 
 st.markdown('<div style="text-align:center; color:#888; font-size:12px; margin-top:50px;">© 2025 Taxi Seguro Global</div>', unsafe_allow_html=True)
+# 👇 PEGA ESTO AL FINAL DEL ARCHIVO (Línea 260 en adelante) 👇
+
+import time
+
+# El Radar: Solo se activa si hay un usuario logueado y está LIBRE
+if st.session_state.get('usuario_activo', False):
+    # Buscamos el estado dentro de los datos guardados en sesión
+    datos = st.session_state.get('datos_usuario', {})
+    estado_chofer = datos.get('estado', 'OCUPADO') # Por seguridad asumimos ocupado si falla
+    
+    # Si está LIBRE, activamos el conteo regresivo
+    if "LIBRE" in str(estado_chofer):
+        time.sleep(15)  # Espera 15 segundos
+        st.rerun()      # Recarga la página para buscar viajes nuevos
