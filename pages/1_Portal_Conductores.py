@@ -92,7 +92,47 @@ if st.session_state.usuario_activo:
     
     # --- LÓGICA DE ACTUALIZACIÓN DE UBICACIÓN ---
     st.subheader(f"Bienvenido, {nombre_completo_unificado}")
+    # --- 📸 NUEVO: SECCIÓN DE FOTO DE PERFIL ---
+datos_socio = st.session_state.get('datos_usuario', {})
+# Extraemos la foto de la fila_actual que ya tienes cargada en tu código
+foto_actual = fila_actual.iloc[0]['Foto_Perfil'] if not fila_actual.empty else "SIN_FOTO"
+
+col_img, col_btn = st.columns([1, 2])
+
+with col_img:
+    if foto_actual and str(foto_actual) != "nan" and len(str(foto_actual)) > 100:
+        try:
+            img_bytes = base64.b64decode(foto_actual)
+            st.image(io.BytesIO(img_bytes), width=150)
+        except:
+            st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=120)
+    else:
+        st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=120)
+
+with col_btn:
+    st.write("📷 **¿Deseas cambiar tu foto?**")
+    archivo_nuevo = st.file_uploader("Sube una imagen (150x150)", type=["jpg", "png", "jpeg"], key="panel_ch_foto")
     
+    if archivo_nuevo:
+        if st.button("💾 GUARDAR NUEVA FOTO"):
+            with st.spinner("Optimizando..."):
+                img = Image.open(archivo_nuevo).convert("RGB")
+                img = img.resize((150, 150)) 
+                buffered = io.BytesIO()
+                img.save(buffered, format="JPEG", quality=60) 
+                foto_b64 = base64.b64encode(buffered.getvalue()).decode()
+                
+                res = enviar_datos({
+                    "accion": "actualizar_foto_perfil",
+                    "email": fila_actual.iloc[0]['Email'],
+                    "foto": foto_b64
+                })
+                
+                if res:
+                    st.success("✅ ¡Foto guardada! Recarga la página para verla.")
+                    st.rerun()
+
+st.write("---") # Separador visual antes del GPS
     # Añadimos 'value=True' para que intente conectar apenas entre
     if st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True):
         # Usamos las variables lat_actual y lon_actual que definiste en la línea 29
