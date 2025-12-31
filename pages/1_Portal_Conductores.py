@@ -307,14 +307,17 @@ else:
                        (df['Apellido'].astype(str).str.upper() == l_ape.upper()) & 
                        (df['Clave'].astype(str) == l_pass)]
             
-            if not match.empty: # Esta es tu línea 309 original
+            if not match.empty:
             datos = match.iloc[0].to_dict()
             st.session_state.usuario_activo = True
             st.session_state.datos_usuario = datos
             
-            # --- NUEVO: GUARDAR EN EL NAVEGADOR PARA SIEMPRE ---
-            datos_json = json.dumps(datos)
-            st_javascript(f"localStorage.setItem('user_taxi_seguro', '{datos_json}');")
+            # --- GUARDADO EN NAVEGADOR PARA AUTO-LOGIN ---
+            try:
+                datos_json = json.dumps(datos)
+                st_javascript(f"localStorage.setItem('user_taxi_seguro', '{datos_json}');")
+            except:
+                pass
             
             st.rerun()
             else:
