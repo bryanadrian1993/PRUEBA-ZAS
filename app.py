@@ -298,11 +298,19 @@ if st.session_state.viaje_confirmado:
             
     except Exception as e: st.info(f"⌛ Recibiendo coordenadas... ({e})")
 
-st.markdown(
-    """
-    <div style="text-align:center; color:#555; font-size:14px; margin-top:20px;">
-        📩 Contáctanos: <a href="mailto:taxi-seguro-word@hotmail.com">taxi-seguro-word@hotmail.com</a>
-    </div>
-    """, 
-    unsafe_allow_html=True
-)
+    st.write("---")
+col_mail1, col_mail2, col_mail3 = st.columns([1, 2, 1])
+with col_mail2:
+    st.info("📩 **¿Necesitas ayuda?**")
+    st.write("Copia nuestro correo de contacto:")
+    st.code("taxi-seguro-word@hotmail.com") # Esto permite copiar con un clic
+    st.markdown(
+        """
+        <div style="text-align:center;">
+            <a href="mailto:taxi-seguro-word@hotmail.com" style="color: #ff4b4b; text-decoration: none; font-weight: bold;">
+                📧 O haz clic aquí para escribirnos
+            </a>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
