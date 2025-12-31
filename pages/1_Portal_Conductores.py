@@ -133,8 +133,11 @@ if st.session_state.usuario_activo:
                     
                     if res:
                         st.success("✅ ¡Foto guardada!")
-                        # Actualizamos la foto en la memoria de la App de inmediato
+                        
+                        # ACTUALIZACIÓN CRÍTICA: Sobrescribimos la memoria de la App
                         st.session_state.datos_usuario['Foto_Perfil'] = foto_b64
+                        
+                        # Esperamos un momento y recargamos la página
                         time.sleep(1) 
                         st.rerun()
     st.write("---") # Separador visual antes del GPS
