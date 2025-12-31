@@ -101,31 +101,60 @@ with tab2:
     if not df_gps.empty:
         df_mapa = df_gps.copy()
         
-        # Limpieza de coordenadas
+        # --- 🛰️ PROCESAMIENTO DE MAPA ---
         def limpiar_coordenada(valor):
             try:
-                s = str(valor).replace(",", "").replace(".", "")
-                num = float(s)
-                # Ajuste heurístico para coordenadas lat/lon típicas
-                while abs(num) > 180: 
-                    num = num / 10
-                return num
+                # Normalizamos el formato: cambiamos coma por punto y convertimos a número
+                v = str(valor).replace(',', '.')
+                num = float(v)
+                # Validamos que sea una coordenada GPS válida
+                if -180 <= num <= 180 and num != 0:
+                    return num
+                return None
             except:
                 return None
 
+        # Creamos columnas limpias para el mapa
         df_mapa['lat'] = df_mapa['Latitud'].apply(limpiar_coordenada)
         df_mapa['lon'] = df_mapa['Longitud'].apply(limpiar_coordenada)
         df_mapa = df_mapa.dropna(subset=['lat', 'lon'])
         
         if not df_mapa.empty:
-            st.caption(f"Mostrando {len(df_mapa)} unidades en el mapa.")
+            st.caption(f"📍 Mostrando {len(df_mapa)} unidades activas en el mapa.")
             
             view_state = pdk.ViewState(
                 latitude=df_mapa['lat'].mean(),
                 longitude=df_mapa['lon'].mean(),
                 zoom=12,
-                pitch=40
+                pitch=0
             )
+
+            layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=df_mapa,
+                get_position='[lon, lat]',
+                get_color='[225, 30, 30, 200]', 
+                get_radius=500, 
+                pickable=True
+            )
+
+            # --- RENDERIZADO FINAL ---
+            st.pydeck_chart(pdk.Deck(
+                map_style=None,
+                initial_view_state=view_state,
+                layers=[layer],
+                tooltip={"text": "Conductor: {Conductor}"}
+            ))
+
+            st.pydeck_chart(pdk.Deck(
+                map_style=None, # Estilo automático para evitar errores de carga
+                initial_view_state=view_state,
+                layers=[layer],
+                tooltip={"text": "Conductor: {Conductor}\nÚltima señal: {Hora}"}
+            ))
+            
+            with st.expander("🔍 Ver registro técnico de GPS"):
+                st.dataframe(df_gps)
 
             layer = pdk.Layer(
                 "ScatterplotLayer",
