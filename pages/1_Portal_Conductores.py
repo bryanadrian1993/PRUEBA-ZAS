@@ -6,8 +6,8 @@ import base64
 from math import radians, cos, sin, asin, sqrt
 import os
 import time
-import io                      
-from PIL import Image       
+import io
+from PIL import Image
 from datetime import datetime
 from streamlit_js_eval import get_geolocation
 
