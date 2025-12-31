@@ -103,19 +103,72 @@ if st.session_state.usuario_activo:
         col_m1.metric("💸 Deuda Actual", f"${deuda_actual:.2f}")
         col_m2.metric("🚦 Estado Actual", estado_actual)
 
-        # Botones de Acción
-        st.subheader("Gestión de Disponibilidad")
-        c1, c2 = st.columns(2)
-        with c1:
-            if st.button("🟢 PONERME LIBRE", use_container_width=True):
-                enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "LIBRE"})
-                st.rerun()
-        with c2:
-            if st.button("🔴 PONERME OCUPADO", use_container_width=True):
-                enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "OCUPADO"})
-                st.rerun()
+        # ==========================================
+        # 🚀 BLOQUE INTELIGENTE: GESTIÓN DE VIAJE (PAQUETE 2)
+        # ==========================================
+        st.subheader("Gestión de Viaje")
+        
+        # 1. Consultamos la hoja VIAJES
+        df_viajes = cargar_datos("VIAJES")
+        viaje_activo = pd.DataFrame() 
+
+        # 2. Filtramos: ¿Existe un viaje "EN CURSO" para este conductor?
+        if not df_viajes.empty and 'Conductor Asignado' in df_viajes.columns:
+            viaje_activo = df_viajes[
+                (df_viajes['Conductor Asignado'].astype(str).str.upper() == nombre_completo_unificado) & 
+                (df_viajes['Estado'].astype(str).str.contains("EN CURSO"))
+            ]
+
+        # 3. DECISIÓN DEL SISTEMA
+        if not viaje_activo.empty:
+            # CASO A: HAY PASAJERO -> Mostramos SOLO el botón de Finalizar
+            datos_v = viaje_activo.iloc[-1]
+            
+            st.warning("🚖 TIENES UN PASAJERO A BORDO")
+            st.write(f"👤 **Cliente:** {datos_v['Nombre del cliente']}")
+            st.write(f"📞 **Tel:** {datos_v['Telefono']}")
+            st.write(f"📍 **Destino:** {datos_v['Referencia']}")
+            st.markdown(f"[🗺️ Ver Mapa]({datos_v['Mapa']})")
+
+            if st.button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True):
+                with st.spinner("Cerrando viaje..."):
+                    enviar_datos({"accion": "terminar_viaje", "conductor": nombre_completo_unificado})
+                    st.success("✅ Viaje finalizado correctamente")
+                    st.rerun()
+        
+        else:
+            # CASO B: NO HAY PASAJERO -> Mostramos botones de Disponibilidad
+            if "OCUPADO" in estado_actual:
+                st.info("Estás en estado OCUPADO (Sin pasajero de App).")
+
+            col_lib, col_ocu = st.columns(2)
+            with col_lib:
+                if st.button("🟢 PONERME LIBRE", use_container_width=True):
+                    enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "LIBRE"})
+                    st.rerun()
+            with col_ocu:
+                if st.button("🔴 PONERME OCUPADO", use_container_width=True):
+                    enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "OCUPADO"})
+                    st.rerun()
         
         st.divider()
+    with st.expander("📜 Ver Mi Historial de Viajes"):
+        # Seguridad: Si el bloque anterior no cargó los datos, los cargamos aquí
+        if 'df_viajes' not in locals():
+            df_viajes = cargar_datos("VIAJES")
+            
+        if not df_viajes.empty and 'Conductor Asignado' in df_viajes.columns:
+            # Filtramos los viajes de este conductor específico
+            mis_viajes = df_viajes[df_viajes['Conductor Asignado'].astype(str).str.upper() == nombre_completo_unificado]
+            
+            if not mis_viajes.empty:
+                cols_mostrar = ['Fecha', 'Nombre del cliente', 'Referencia', 'Estado']
+                cols_finales = [c for c in cols_mostrar if c in mis_viajes.columns]
+                st.dataframe(mis_viajes[cols_finales].sort_values(by='Fecha', ascending=False), use_container_width=True)
+            else:
+                st.info("Aún no tienes historial de viajes.")
+        else:
+            st.write("Cargando datos...")    
     
     if st.button("🔒 CERRAR SESIÓN"):
         st.session_state.usuario_activo = False
