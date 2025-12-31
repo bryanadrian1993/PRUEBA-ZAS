@@ -92,8 +92,8 @@ if st.session_state.usuario_activo:
     
     # --- LÓGICA DE ACTUALIZACIÓN DE UBICACIÓN ---
     st.subheader(f"Bienvenido, {nombre_completo_unificado}")
+
     # --- 📸 SECCIÓN DE FOTO DE PERFIL ---
-    datos_socio = st.session_state.get('datos_usuario', {})
     foto_actual = fila_actual.iloc[0]['Foto_Perfil'] if not fila_actual.empty else "SIN_FOTO"
 
     col_img, col_btn = st.columns([1, 2])
@@ -131,7 +131,7 @@ if st.session_state.usuario_activo:
                         st.success("✅ ¡Foto guardada! Recargando...")
                         st.rerun()
 
-st.write("---") # Separador visual antes del GPS
+    st.write("---") # Separador visual antes del GPS
     # Añadimos 'value=True' para que intente conectar apenas entre
     if st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True):
         # Usamos las variables lat_actual y lon_actual que definiste en la línea 29
