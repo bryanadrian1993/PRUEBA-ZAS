@@ -35,21 +35,25 @@ else:
     lat_actual, lon_actual = None, None
 # --- 🛠️ FUNCIONES ---
 def cargar_datos(hoja):
+    # --- IDs EXTRAÍDOS DE TUS IMÁGENES ---
+    GID_CHOFERES = "773119638"
+    GID_VIAJES   = "0"
+    
     try:
-        # CAMBIO CLAVE: Usamos 'export?format=csv' en lugar de 'gviz/tq'
-        # Esto fuerza a Google a darnos un CSV limpio y ordenado.
-        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&sheet={hoja}"
+        # Seleccionamos el ID correcto según la hoja que pida el código
+        gid_actual = GID_CHOFERES if hoja == "CHOFERES" else GID_VIAJES
         
-        # Leemos el CSV directamente
+        # Usamos el enlace de exportación directa (Mucho más estable)
+        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={gid_actual}"
+        
+        # Leemos el archivo CSV
         df = pd.read_csv(url)
         
-        # Limpieza de espacios en los títulos
+        # LIMPIEZA VITAL: Quitamos espacios invisibles en los títulos
         df.columns = df.columns.str.strip()
         
         return df
     except Exception as e:
-        # Si falla, mostramos el error pero no rompemos la app
-        st.error(f"Error cargando {hoja}: {e}")
         return pd.DataFrame()
 
 def enviar_datos(datos):
