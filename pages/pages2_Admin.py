@@ -101,24 +101,39 @@ with tab2:
     if not df_gps.empty:
         df_mapa = df_gps.copy()
         
-        # --- 🛰️ PROCESAMIENTO DE MAPA ---
         def limpiar_coordenada(valor):
             try:
-                # Normalizamos el formato: cambiamos coma por punto y convertimos a número
                 v = str(valor).replace(',', '.')
                 num = float(v)
-                # Validamos que sea una coordenada GPS válida
                 if -180 <= num <= 180 and num != 0:
                     return num
                 return None
             except:
                 return None
 
-        # Creamos columnas limpias para el mapa
         df_mapa['lat'] = df_mapa['Latitud'].apply(limpiar_coordenada)
         df_mapa['lon'] = df_mapa['Longitud'].apply(limpiar_coordenada)
         df_mapa = df_mapa.dropna(subset=['lat', 'lon'])
-        # --- RENDERIZADO DEL MAPA ÚNICO ---
+        
+        if not df_mapa.empty:
+            # ESTO FALTABA: Definir la vista y la capa
+            view_state = pdk.ViewState(
+                latitude=df_mapa['lat'].mean(),
+                longitude=df_mapa['lon'].mean(),
+                zoom=12,
+                pitch=0
+            )
+
+            layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=df_mapa,
+                get_position='[lon, lat]',
+                get_color='[225, 30, 30, 200]', 
+                get_radius=500, 
+                pickable=True
+            )
+
+            # RENDERIZADO (Alineado correctamente)
             st.pydeck_chart(pdk.Deck(
                 map_style=None,
                 initial_view_state=view_state,
@@ -132,17 +147,15 @@ with tab2:
             st.warning("⚠️ Hay datos de GPS, pero no tienen el formato correcto para mostrarse.")
     else:
         st.info("Sin señal GPS. Esperando a que los conductores activen su rastreo...")
-        
 
 # --- TAB 3: HISTORIAL (NUEVO) ---
 with tab3:
-    st.subheader("🗂️ Registro de Pedidos")
+    st.subheader("📂 Registro de Pedidos")
     if st.button("🔄 Actualizar Tabla"):
         st.rerun()
-        
+
     if not df_viajes.empty:
         # Ordenar para ver el más reciente primero
-        # Asumiendo que la primera columna es Fecha
         try:
             df_viajes = df_viajes.iloc[::-1] # Invierte el orden (últimos primero)
         except: pass
