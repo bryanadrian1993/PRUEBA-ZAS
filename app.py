@@ -298,4 +298,11 @@ if st.session_state.viaje_confirmado:
             
     except Exception as e: st.info(f"⌛ Recibiendo coordenadas... ({e})")
 
-st.markdown('<div class="footer"><p>© 2025 Taxi Seguro Global</p></div>', unsafe_allow_html=True)
+st.markdown(
+    """
+    <div style="text-align:center; color:#555; font-size:14px; margin-top:20px;">
+        📩 Contáctanos: <a href="mailto:taxi-seguro-word@hotmail.com">taxi-seguro-word@hotmail.com</a>
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
