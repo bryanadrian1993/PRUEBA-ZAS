@@ -28,15 +28,11 @@ def enviar_datos(params):
     except Exception as e:
         st.error(f"Error de conexión: {e}")
 # --- 🔄 INICIALIZAR SESIÓN PERSISTENTE ---
-if 'usuario_activo' not in st.session_state:
-    st.session_state.usuario_activo = False
+if 'usuario_activo' not in st.session_state: st.session_state.usuario_activo = False
+if 'datos_usuario' not in st.session_state: st.session_state.datos_usuario = {}
 
-if 'datos_usuario' not in st.session_state:
-    st.session_state.datos_usuario = {}
-
-# Nueva variable para bloquear el Excel después de subir una foto
-if 'foto_temporal' not in st.session_state:
-    st.session_state.foto_temporal = None
+# ESTA LÍNEA ES NUEVA: Guardará la foto subida para que el Excel no la borre
+if 'foto_blindada' not in st.session_state: st.session_state.foto_blindada = None
 
 # --- 📋 LISTAS ---
 PAISES = ["Ecuador", "Colombia", "Perú", "México", "España", "Otro"]
@@ -101,16 +97,19 @@ if st.session_state.usuario_activo:
     # --- LÓGICA DE ACTUALIZACIÓN DE UBICACIÓN ---
     st.subheader(f"Bienvenido, {nombre_completo_unificado}")
 
-# --- 📸 VISUALIZACIÓN DE FOTO INSTANTÁNEA ---
-    # Paso 1: Intentamos sacar la foto de la memoria de la sesión primero
-    foto_mostrar = st.session_state.datos_usuario.get('Foto_Perfil', 'SIN_FOTO')
-
-    # Paso 2: Solo si la sesión está vacía, buscamos en el Excel
-    if (not foto_mostrar or foto_mostrar == "SIN_FOTO") and not fila_actual.empty:
-        foto_excel = fila_actual.iloc[0]['Foto_Perfil']
-        if str(foto_excel) != "nan" and len(str(foto_excel)) > 100:
-            foto_mostrar = foto_excel
-            st.session_state.datos_usuario['Foto_Perfil'] = foto_mostrar
+# --- 📸 VISUALIZACIÓN CON ESCUDO DE MEMORIA ---
+    # Paso 1: Revisamos si hay una foto en el escudo (la que acabas de subir)
+    if st.session_state.foto_blindada:
+        foto_mostrar = st.session_state.foto_blindada
+    else:
+        # Paso 2: Si no hay escudo, buscamos en la sesión o en el Excel
+        foto_mostrar = st.session_state.datos_usuario.get('Foto_Perfil', 'SIN_FOTO')
+        
+        if (len(str(foto_mostrar)) < 100) and not fila_actual.empty:
+            foto_excel = fila_actual.iloc[0]['Foto_Perfil']
+            if str(foto_excel) != "nan" and len(str(foto_excel)) > 100:
+                foto_mostrar = foto_excel
+                st.session_state.datos_usuario['Foto_Perfil'] = foto_mostrar
 
     col_img, col_btn = st.columns([1, 2])
     with col_img:
@@ -143,11 +142,14 @@ if st.session_state.usuario_activo:
                     })
                     
                     if res:
-                        # ACTUALIZACIÓN LOCAL INMEDIATA:
-                        # Esto cambia la foto en pantalla sin recargar la página
+                        st.success("✅ ¡Foto guardada!")
+                        
+                        # ACTUALIZACIÓN DOBLE: En la sesión y en la caja fuerte temporal
                         st.session_state.datos_usuario['Foto_Perfil'] = foto_b64
-                        st.success("✅ ¡Foto actualizada! El cambio es permanente.")
-                        # IMPORTANTE: No ponemos st.rerun() para que el Excel viejo no nos pise la foto
+                        st.session_state.foto_temporal = foto_b64
+                        
+                        time.sleep(1) 
+                        st.rerun()
     st.write("---") # Separador visual antes del GPS
     # Añadimos 'value=True' para que intente conectar apenas entre
     if st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True):
