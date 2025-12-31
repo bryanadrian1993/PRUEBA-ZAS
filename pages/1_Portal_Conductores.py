@@ -94,18 +94,19 @@ if st.session_state.usuario_activo:
     # --- LÓGICA DE ACTUALIZACIÓN DE UBICACIÓN ---
     st.subheader(f"Bienvenido, {nombre_completo_unificado}")
 
-    # --- 📸 SECCIÓN DE FOTO DE PERFIL ---
-    # Buscamos la foto: primero en la sesión (por si acaba de cambiar) y luego en el Excel
-    foto_actual = st.session_state.datos_usuario.get('Foto_Perfil', 'SIN_FOTO')
-    if foto_actual == "SIN_FOTO" and not fila_actual.empty:
-        foto_actual = fila_actual.iloc[0]['Foto_Perfil']
+    # --- 📸 SECCIÓN DE FOTO DE PERFIL OPTIMIZADA ---
+    # Prioridad absoluta a la sesión para evitar que el Excel sobrescriba con la foto vieja
+    foto_mostrar = st.session_state.datos_usuario.get('Foto_Perfil', 'SIN_FOTO')
+    
+    if (not foto_mostrar or foto_mostrar == "SIN_FOTO" or str(foto_mostrar) == "nan") and not fila_actual.empty:
+        foto_mostrar = fila_actual.iloc[0]['Foto_Perfil']
+        st.session_state.datos_usuario['Foto_Perfil'] = foto_mostrar
 
     col_img, col_btn = st.columns([1, 2])
-
     with col_img:
-        if foto_actual and str(foto_actual) != "nan" and len(str(foto_actual)) > 100:
+        if foto_mostrar and str(foto_mostrar) != "nan" and len(str(foto_mostrar)) > 100:
             try:
-                img_bytes = base64.b64decode(foto_actual)
+                img_bytes = base64.b64decode(foto_mostrar)
                 st.image(io.BytesIO(img_bytes), width=150)
             except:
                 st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=120)
