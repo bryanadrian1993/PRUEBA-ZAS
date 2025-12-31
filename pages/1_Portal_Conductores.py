@@ -36,10 +36,14 @@ else:
 # --- 🛠️ FUNCIONES ---
 def cargar_datos(hoja):
     try:
-        cache_buster = datetime.now().strftime("%Y%m%d%H%M%S")
-        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cache_buster}"
+        cb = datetime.now().strftime("%Y%m%d%H%M%S")
+        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cb}"
         df = pd.read_csv(url)
-        df.columns = df.columns.str.strip() # Limpia espacios en nombres de columnas
+        
+        # 👇 ESTA ES LA LÍNEA MÁGICA QUE TE FALTA 👇
+        df.columns = df.columns.str.strip() 
+        # 👆 Esto borra los espacios invisibles ("Estado " -> "Estado")
+        
         return df
     except: return pd.DataFrame()
 
