@@ -1,7 +1,6 @@
 streamlit
 pandas
-st-gsheets-connection
-streamlit-js-eval
-pydeck
-streamlit-autorefresh
+requests
 Pillow
+streamlit-javascript
+streamlit-js-eval
