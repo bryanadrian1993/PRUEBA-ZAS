@@ -73,6 +73,34 @@ tab1, tab2, tab3 = st.tabs(["📋 GESTIÓN CHOFERES", "🗺️ MAPA DE FLOTA", "
 # --- TAB 1: GESTIÓN ---
 with tab1:
     st.subheader("Directorio de Conductores")
+# --- 💰 CONTABILIDAD REAL (Comisión: $0.05/km) ---
+st.markdown("---")
+st.subheader("💵 Balance de Ganancias")
+
+if not df_viajes.empty:
+    # 1. Tu Script guarda la comisión en la Columna K (índice 10)
+    df_viajes['Comision'] = pd.to_numeric(df_viajes.iloc[:, 10], errors='coerce').fillna(0)
+    
+    # 2. Solo sumamos los viajes terminados
+    viajes_terminados = df_viajes[df_viajes['Estado'] == 'TERMINADO ✅']
+    
+    # 3. Totales
+    total_ganado = viajes_terminados['Comision'].sum()
+    km_estimados = total_ganado / 0.05 if total_ganado > 0 else 0
+
+    # --- MOSTRAR MÉTRICAS FINANCIERAS ---
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Ganancia Acumulada", f"${total_ganado:,.2f} USD", delta="Tarifa: 5¢/km")
+    c2.metric("Kilómetros Totales", f"{km_estimados:,.1f} Km")
+    c3.metric("Por Cobrar (Pendiente)", f"${total_ganado:,.2f} USD", delta="- Pendiente")
+
+    if 'Conductor Asignado' in viajes_terminados.columns:
+        st.write("**Deuda por Conductor (Acumulada):**")
+        deuda_chofer = viajes_terminados.groupby('Conductor Asignado')['Comision'].sum()
+        st.bar_chart(deuda_chofer)
+else:
+    st.info("No hay viajes registrados para calcular ganancias.")
+    
     if not df_choferes.empty:
         # Mostramos tabla limpia
         st.dataframe(df_choferes[['Nombre', 'Apellido', 'Telefono', 'Placa', 'Estado', 'Tipo_Vehiculo', 'Pais']], use_container_width=True)
