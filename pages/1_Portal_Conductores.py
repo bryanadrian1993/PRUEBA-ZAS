@@ -101,19 +101,16 @@ if st.session_state.usuario_activo:
     # --- LÓGICA DE ACTUALIZACIÓN DE UBICACIÓN ---
     st.subheader(f"Bienvenido, {nombre_completo_unificado}")
 
-# --- 📸 VISUALIZACIÓN BLINDADA (SOLUCIÓN FINAL) ---
-    # Paso 1: Intentamos sacar la foto de la memoria de la sesión
+# --- 📸 VISUALIZACIÓN DE FOTO INSTANTÁNEA ---
+    # Paso 1: Intentamos sacar la foto de la memoria de la sesión primero
     foto_mostrar = st.session_state.datos_usuario.get('Foto_Perfil', 'SIN_FOTO')
 
-    # Paso 2: Solo si en la sesión NO hay una foto válida (código largo), buscamos en el Excel
-    # Si ya hay una foto de más de 100 caracteres, ignoramos lo que diga el Excel
-    if len(str(foto_mostrar)) < 100:
-        if not fila_actual.empty:
-            foto_excel = fila_actual.iloc[0]['Foto_Perfil']
-            if str(foto_excel) != "nan" and len(str(foto_excel)) > 100:
-                foto_mostrar = foto_excel
-                # Guardamos en sesión para futuras recargas
-                st.session_state.datos_usuario['Foto_Perfil'] = foto_mostrar
+    # Paso 2: Solo si la sesión está vacía, buscamos en el Excel
+    if (not foto_mostrar or foto_mostrar == "SIN_FOTO") and not fila_actual.empty:
+        foto_excel = fila_actual.iloc[0]['Foto_Perfil']
+        if str(foto_excel) != "nan" and len(str(foto_excel)) > 100:
+            foto_mostrar = foto_excel
+            st.session_state.datos_usuario['Foto_Perfil'] = foto_mostrar
 
     col_img, col_btn = st.columns([1, 2])
     with col_img:
@@ -132,7 +129,7 @@ if st.session_state.usuario_activo:
         
         if archivo_nuevo:
             if st.button("💾 GUARDAR NUEVA FOTO"):
-                with st.spinner("Optimizando..."):
+                with st.spinner("Actualizando perfil..."):
                     img = Image.open(archivo_nuevo).convert("RGB")
                     img = img.resize((150, 150)) 
                     buffered = io.BytesIO()
@@ -146,15 +143,11 @@ if st.session_state.usuario_activo:
                     })
                     
                     if res:
-                        # 1. Guardamos la foto en la memoria local inmediatamente
+                        # ACTUALIZACIÓN LOCAL INMEDIATA:
+                        # Esto cambia la foto en pantalla sin recargar la página
                         st.session_state.datos_usuario['Foto_Perfil'] = foto_b64
-                        
-                        # 2. Avisamos al usuario
-                        st.success("✅ ¡Foto guardada!")
-                        
-                        # 3. Esperamos y reiniciamos
-                        time.sleep(2) 
-                        st.rerun()
+                        st.success("✅ ¡Foto actualizada! El cambio es permanente.")
+                        # IMPORTANTE: No ponemos st.rerun() para que el Excel viejo no nos pise la foto
     st.write("---") # Separador visual antes del GPS
     # Añadimos 'value=True' para que intente conectar apenas entre
     if st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True):
