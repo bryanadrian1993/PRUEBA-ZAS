@@ -94,14 +94,17 @@ if st.session_state.usuario_activo:
     # --- LÓGICA DE ACTUALIZACIÓN DE UBICACIÓN ---
     st.subheader(f"Bienvenido, {nombre_completo_unificado}")
 
-    # --- 📸 SECCIÓN DE FOTO DE PERFIL OPTIMIZADA ---
-    # Prioridad absoluta a la sesión para evitar que el Excel sobrescriba con la foto vieja
+# --- 📸 SECCIÓN DE FOTO DE PERFIL CON PRIORIDAD DE SESIÓN ---
+    # Paso A: Primero miramos si hay una foto en la memoria local (Session State)
     foto_mostrar = st.session_state.datos_usuario.get('Foto_Perfil', 'SIN_FOTO')
     
+    # Paso B: Solo si la memoria local está vacía o es inválida, vamos a buscar al Excel
     if (not foto_mostrar or foto_mostrar == "SIN_FOTO" or str(foto_mostrar) == "nan") and not fila_actual.empty:
         foto_mostrar = fila_actual.iloc[0]['Foto_Perfil']
+        # Guardamos lo que encontramos en el Excel en la memoria local para la próxima recarga
         st.session_state.datos_usuario['Foto_Perfil'] = foto_mostrar
 
+    # Paso C: Ahora mostramos 'foto_mostrar', que siempre tendrá la versión más reciente
     col_img, col_btn = st.columns([1, 2])
     with col_img:
         if foto_mostrar and str(foto_mostrar) != "nan" and len(str(foto_mostrar)) > 100:
