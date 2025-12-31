@@ -245,70 +245,70 @@ with st.expander("¿Olvidaste tu contraseña?"):
                     st.error("Error al conectar con el servidor.")
         else:
             st.warning("Escribe un correo válido.")
-    with tab_reg:
-    with st.form("registro_form"):
-        st.subheader("Registro de Nuevos Socios")
-        col1, col2 = st.columns(2)
-        with col1:
-            r_nom = st.text_input("Nombres *")
-            r_ced = st.text_input("Cédula/ID *")
-            r_email = st.text_input("Email *")
-            r_pais = st.selectbox("País *", PAISES)
-        with col2:
-            r_ape = st.text_input("Apellidos *")
-            r_telf = st.text_input("WhatsApp (Sin código) *")
-            r_veh = st.selectbox("Tipo de Vehículo *", VEHICULOS)
-            r_idioma = st.selectbox("Idioma", IDIOMAS)
-
-        r_dir = st.text_input("Dirección *")
-        r_pla = st.text_input("Placa *")
-        r_pass1 = st.text_input("Contraseña *", type="password")
+        with tab_reg:
+            with st.form("registro_form"):
+                st.subheader("Registro de Nuevos Socios")
+                col1, col2 = st.columns(2)
+                with col1:
+                    r_nom = st.text_input("Nombres *")
+                    r_ced = st.text_input("Cédula/ID *")
+                    r_email = st.text_input("Email *")
+                    r_pais = st.selectbox("País *", PAISES)
+                with col2:
+                    r_ape = st.text_input("Apellidos *")
+                    r_telf = st.text_input("WhatsApp (Sin código) *")
+                    r_veh = st.selectbox("Tipo de Vehículo *", VEHICULOS)
+                    r_idioma = st.selectbox("Idioma", IDIOMAS)
         
-        # --- 📸 1. NUEVO: CAMPO PARA SUBIR FOTO ---
-        st.write("---")
-        st.write("📷 **Foto de Perfil** (Opcional)")
-        archivo_foto_reg = st.file_uploader("Sube tu foto", type=["jpg", "png", "jpeg"])
-        # ------------------------------------------
+                r_dir = st.text_input("Dirección *")
+                r_pla = st.text_input("Placa *")
+                r_pass1 = st.text_input("Contraseña *", type="password")
+                
+                # --- 📸 1. NUEVO: CAMPO PARA SUBIR FOTO ---
+                st.write("---")
+                st.write("📷 **Foto de Perfil** (Opcional)")
+                archivo_foto_reg = st.file_uploader("Sube tu foto", type=["jpg", "png", "jpeg"])
+                # ------------------------------------------
+                
+                if st.form_submit_button("✅ COMPLETAR REGISTRO"):
+                    if r_nom and r_email and r_pass1:
+                        
+                        # --- ⚙️ 2. NUEVO: PROCESAR FOTO A BASE64 ---
+                        foto_para_guardar = "SIN_FOTO" # Valor por defecto
         
-        if st.form_submit_button("✅ COMPLETAR REGISTRO"):
-            if r_nom and r_email and r_pass1:
-                
-                # --- ⚙️ 2. NUEVO: PROCESAR FOTO A BASE64 ---
-                foto_para_guardar = "SIN_FOTO" # Valor por defecto
-
-                if archivo_foto_reg is not None:
-                    try:
-                        img = Image.open(archivo_foto_reg)
-                        img = img.resize((150, 150)) # Reducir tamaño
-                        buffered = io.BytesIO()
-                        img.save(buffered, format="JPEG", quality=70)
-                        foto_para_guardar = base64.b64encode(buffered.getvalue()).decode()
-                    except Exception as e:
-                        st.error(f"Error procesando la imagen: {e}")
-                # ---------------------------------------------
-
-                # --- 📤 3. AGREGAMOS LA FOTO AL ENVÍO ---
-                res = enviar_datos({
-                    "accion": "registrar_conductor", 
-                    "nombre": r_nom, 
-                    "apellido": r_ape, 
-                    "cedula": r_ced, 
-                    "email": r_email, 
-                    "direccion": r_dir, 
-                    "telefono": r_telf, 
-                    "placa": r_pla, 
-                    "clave": r_pass1, 
-                    "foto": foto_para_guardar,  # <--- AQUÍ VA LA FOTO NUEVA
-                    "pais": r_pais, 
-                    "idioma": r_idioma, 
-                    "Tipo_Vehiculo": r_veh
-                })
-                
-                # Mensaje de éxito o error según responda tu función
-                if res: 
-                    st.success("¡Registro exitoso! Ya puedes ingresar desde la pestaña superior.")
-            else:
-                st.warning("Por favor, completa los campos obligatorios (*)")
+                        if archivo_foto_reg is not None:
+                            try:
+                                img = Image.open(archivo_foto_reg)
+                                img = img.resize((150, 150)) # Reducir tamaño
+                                buffered = io.BytesIO()
+                                img.save(buffered, format="JPEG", quality=70)
+                                foto_para_guardar = base64.b64encode(buffered.getvalue()).decode()
+                            except Exception as e:
+                                st.error(f"Error procesando la imagen: {e}")
+                        # ---------------------------------------------
+        
+                        # --- 📤 3. AGREGAMOS LA FOTO AL ENVÍO ---
+                        res = enviar_datos({
+                            "accion": "registrar_conductor", 
+                            "nombre": r_nom, 
+                            "apellido": r_ape, 
+                            "cedula": r_ced, 
+                            "email": r_email, 
+                            "direccion": r_dir, 
+                            "telefono": r_telf, 
+                            "placa": r_pla, 
+                            "clave": r_pass1, 
+                            "foto": foto_para_guardar,  # <--- AQUÍ VA LA FOTO NUEVA
+                            "pais": r_pais, 
+                            "idioma": r_idioma, 
+                            "Tipo_Vehiculo": r_veh
+                        })
+                        
+                        # Mensaje de éxito o error según responda tu función
+                        if res: 
+                            st.success("¡Registro exitoso! Ya puedes ingresar desde la pestaña superior.")
+                    else:
+                        st.warning("Por favor, completa los campos obligatorios (*)")
 
 st.markdown('<div style="text-align:center; color:#888; font-size:12px; margin-top:50px;">© 2025 Taxi Seguro Global</div>', unsafe_allow_html=True)
 # 👇 PEGA ESTO AL FINAL DEL ARCHIVO (Línea 260 en adelante) 👇
