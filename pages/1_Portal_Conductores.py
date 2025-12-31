@@ -74,7 +74,7 @@ def cargar_datos(hoja):
     GID_CHOFERES = "773119638"
     GID_VIAJES   = "0"
     try:
-        gid_actual = GID_CHOFERES if hoja == "CHOFERES" else GID_VIAJES
+        gid_actual = GID_CHOFERES if hoja == "CHOFERES" else GID_VIA_JES
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={gid_actual}"
         df = pd.read_csv(url)
         df.columns = df.columns.str.strip()
@@ -206,7 +206,7 @@ if st.session_state.usuario_activo:
                             kms_finales = res_osrm['routes'][0]['distance'] / 1000
                             if kms_finales < 0.5: kms_finales = 1.0 
                         except Exception as e:
-                            # Cálculo de respaldo solo si el mapa falla y dentro del botón
+                            # Cálculo de respaldo solo si el mapa falla (ahora correctamente indentado)
                             dLat, dLon = radians(lat_actual-lat_c), radians(lon_actual-lon_c)
                             a = sin(dLat/2)**2 + cos(radians(lat_c)) * cos(radians(lat_actual)) * sin(dLon/2)**2
                             kms_finales = 2 * 6371 * asin(sqrt(a))
