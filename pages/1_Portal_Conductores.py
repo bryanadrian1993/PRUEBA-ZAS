@@ -195,7 +195,7 @@ if st.session_state.usuario_activo:
 
             if st.button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True):
                 with st.spinner("Calculando distancia real por calles..."):
-                    kms_finales = 5.0 
+                    kms_finales = 1.0 
                     if lat_actual and lon_actual:
                         try:
                             link_mapa = str(datos_v['Mapa'])
@@ -206,11 +206,10 @@ if st.session_state.usuario_activo:
                             kms_finales = res_osrm['routes'][0]['distance'] / 1000
                             if kms_finales < 0.5: kms_finales = 1.0 
                         except Exception as e:
-                            # Estas líneas DEBEN tener estos espacios a la izquierda
-                               from math import radians, cos, sin, asin, sqrt
-                               dLat, dLon = radians(lat_actual-lat_c), radians(lon_actual-lon_c)
-                               a = sin(dLat/2)**2 + cos(radians(lat_c)) * cos(radians(lat_actual)) * sin(dLon/2)**2
-                               kms_finales = 2 * 6371 * asin(sqrt(a))
+                            # Cálculo de respaldo si el mapa falla
+                            dLat, dLon = radians(lat_actual-lat_c), radians(lon_actual-lon_c)
+                            a = sin(dLat/2)**2 + cos(radians(lat_c)) * cos(radians(lat_actual)) * sin(dLon/2)**2
+                            kms_finales = 2 * 6371 * asin(sqrt(a))
 
                     res = enviar_datos({
                         "accion": "terminar_viaje", 
@@ -219,7 +218,7 @@ if st.session_state.usuario_activo:
                     })
                     
                     if res:
-                        st.success(f"✅ Viaje finalizado: {kms_finales:.2f} km por calles.")
+                        st.success(f"✅ Viaje finalizado: {kms_finales:.2f} km.")
                         time.sleep(2)
                         st.rerun()
         
