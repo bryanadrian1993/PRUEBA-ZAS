@@ -94,7 +94,10 @@ if st.session_state.usuario_activo:
     st.subheader(f"Bienvenido, {nombre_completo_unificado}")
 
     # --- 📸 SECCIÓN DE FOTO DE PERFIL ---
-    foto_actual = fila_actual.iloc[0]['Foto_Perfil'] if not fila_actual.empty else "SIN_FOTO"
+    # Buscamos la foto: primero en la sesión (por si acaba de cambiar) y luego en el Excel
+    foto_actual = st.session_state.datos_usuario.get('Foto_Perfil', 'SIN_FOTO')
+    if foto_actual == "SIN_FOTO" and not fila_actual.empty:
+        foto_actual = fila_actual.iloc[0]['Foto_Perfil']
 
     col_img, col_btn = st.columns([1, 2])
 
