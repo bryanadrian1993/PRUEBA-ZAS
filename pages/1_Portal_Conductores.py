@@ -128,8 +128,11 @@ if st.session_state.usuario_activo:
                     })
                     
                     if res:
-                        st.success("✅ ¡Foto guardada! Recargando...")
-                        st.rerun()
+                    st.success("✅ ¡Foto guardada!")
+                    # Actualizamos la foto en la memoria de la App de inmediato
+                    st.session_state.datos_usuario['Foto_Perfil'] = foto_b64
+                    time.sleep(1) # Esperamos un segundo para que el usuario vea el mensaje
+                    st.rerun() # Forzamos a la App a redibujar todo con la nueva foto
 
     st.write("---") # Separador visual antes del GPS
     # Añadimos 'value=True' para que intente conectar apenas entre
