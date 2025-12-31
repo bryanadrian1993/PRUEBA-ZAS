@@ -103,7 +103,7 @@ if st.session_state.usuario_activo:
                             kms_finales = 2 * 6371 * math.asin(math.sqrt(a))
                         except: kms_finales = 5.0
                     
-                    if enviar_datos({"accion": "terminar_via_je", "conductor": nombre_completo_unificado, "km": round(kms_finales, 2)}):
+                    if enviar_datos({"accion": "terminar_viaje", "conductor": nombre_completo_unificado, "km": round(kms_finales, 2)}):
                         st.success("✅ Viaje finalizado.")
                         time.sleep(2)
                         st.rerun()
@@ -116,7 +116,7 @@ if st.session_state.usuario_activo:
 else:
     tab_log, tab_reg = st.tabs(["🔐 INGRESAR", "📝 REGISTRARME"])
     with tab_log:
-        l_nom, l_ape = st.text_input("Nombre"), st.text_input("Apellido")
+        l_nom, l_ape = st.text_input("Nombre registrado"), st.text_input("Apellido registrado")
         l_pass = st.text_input("Contraseña", type="password")
         if st.button("ENTRAR AL PANEL", type="primary"):
             df = cargar_datos("CHOFERES")
@@ -135,8 +135,7 @@ else:
                 r_nom, r_ced, r_email = st.text_input("Nombres *"), st.text_input("Cédula *"), st.text_input("Email *")
                 r_pais = st.selectbox("País", PAISES)
             with c2:
-                r_ape, r_telf = st.text_input("Apellidos *"), st.text_input("WhatsApp *")
-                r_veh = st.selectbox("Vehículo", VEHICULOS)
+                r_ape, r_telf = st.text_input("Apellidos *"), st.text_input("WhatsApp *"), st.selectbox("Vehículo", VEHICULOS)
             r_dir, r_pla, r_pass1 = st.text_input("Dirección *"), st.text_input("Placa *"), st.text_input("Clave *", type="password")
             if st.form_submit_button("✅ COMPLETAR REGISTRO"):
                 if r_nom and r_email and r_pass1:
