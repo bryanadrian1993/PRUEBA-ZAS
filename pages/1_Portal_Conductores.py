@@ -16,8 +16,14 @@ LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO"
 # --- 🔗 CONFIGURACIÓN TÉCNICA ---
 st.set_page_config(page_title="Portal Conductores", page_icon="🚖", layout="centered")
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
-URL_SCRIPT = "https://script.google.com/macros/s/AKfycbwZowS5G8Xj1QFp7GngiP0DHVwu1f8v2bRIh-RPDmhYjlkLui2XF-40o0qv4GJd9Vvo/exec"
+URL_SCRIPT = "https://script.google.com/macros/s/AKfycbxvsj1h8xSsbyIlo7enfZWO2Oe1IVJer3KHpUO_o08gkRGJKmFnH0wNRvQRa38WWKgv/exec"
+import requests 
 
+def enviar_datos(params):
+    try:
+        requests.post(URL_SCRIPT, params=params)
+    except Exception as e:
+        st.error(f"Error de conexión: {e}")
 # --- 🔄 INICIALIZAR SESIÓN ---
 if 'usuario_activo' not in st.session_state: st.session_state.usuario_activo = False
 if 'datos_usuario' not in st.session_state: st.session_state.datos_usuario = {}
