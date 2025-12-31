@@ -94,17 +94,17 @@ if st.session_state.usuario_activo:
     # --- LÓGICA DE ACTUALIZACIÓN DE UBICACIÓN ---
     st.subheader(f"Bienvenido, {nombre_completo_unificado}")
 
-# --- 📸 SECCIÓN DE FOTO DE PERFIL CON PRIORIDAD DE SESIÓN ---
-    # Paso A: Primero miramos si hay una foto en la memoria local (Session State)
+# --- 📸 SECCIÓN DE FOTO DE PERFIL CON BLOQUEO DE SOBREESCRITURA ---
+    # Paso 1: Intentamos obtener la foto de la memoria de la sesión
     foto_mostrar = st.session_state.datos_usuario.get('Foto_Perfil', 'SIN_FOTO')
     
-    # Paso B: Solo si la memoria local está vacía o es inválida, vamos a buscar al Excel
-    if (not foto_mostrar or foto_mostrar == "SIN_FOTO" or str(foto_mostrar) == "nan") and not fila_actual.empty:
-        foto_mostrar = fila_actual.iloc[0]['Foto_Perfil']
-        # Guardamos lo que encontramos en el Excel en la memoria local para la próxima recarga
-        st.session_state.datos_usuario['Foto_Perfil'] = foto_mostrar
+    # Paso 2: SOLO si la memoria está vacía (< 100 caracteres), cargamos desde Excel
+    if len(str(foto_mostrar)) < 100 and not fila_actual.empty:
+        foto_desde_excel = fila_actual.iloc[0]['Foto_Perfil']
+        if str(foto_desde_excel) != "nan" and len(str(foto_desde_excel)) > 100:
+            foto_mostrar = foto_desde_excel
+            st.session_state.datos_usuario['Foto_Perfil'] = foto_mostrar
 
-    # Paso C: Ahora mostramos 'foto_mostrar', que siempre tendrá la versión más reciente
     col_img, col_btn = st.columns([1, 2])
     with col_img:
         if foto_mostrar and str(foto_mostrar) != "nan" and len(str(foto_mostrar)) > 100:
@@ -138,10 +138,10 @@ if st.session_state.usuario_activo:
                     if res:
                         st.success("✅ ¡Foto guardada!")
                         
-                        # ACTUALIZACIÓN CRÍTICA: Sobrescribimos la memoria de la App
+                        # ESTA ES LA LÍNEA MÁS IMPORTANTE:
+                        # Guarda en la memoria del navegador para que no se borre al recargar
                         st.session_state.datos_usuario['Foto_Perfil'] = foto_b64
                         
-                        # Esperamos un momento y recargamos la página
                         time.sleep(1) 
                         st.rerun()
     st.write("---") # Separador visual antes del GPS
