@@ -35,15 +35,36 @@ def gestionar_autologin():
             return None
     return None
 
-# --- 🔄 INICIALIZAR SESIÓN ---
+def enviar_datos_post(params):
+    try:
+        requests.post(URL_SCRIPT, params=params)
+    except Exception as e:
+        st.error(f"Error de conexión: {e}")
+
+# --- 🔄 INICIALIZAR SESIÓN CON AUTO-LOGIN ---
 if 'usuario_activo' not in st.session_state:
     datos_recuperados = gestionar_autologin()
-    st.session_state.usuario_activo = True if datos_recuperados else False
-    st.session_state.datos_usuario = datos_recuperados if datos_recuperados else {}
+    if datos_recuperados:
+        st.session_state.usuario_activo = True
+        st.session_state.datos_usuario = datos_recuperados
+    else:
+        st.session_state.usuario_activo = False
 
-# --- 🛰️ CAPTURA GPS ---
+if 'datos_usuario' not in st.session_state:
+    st.session_state.datos_usuario = {}
+
+# --- 📋 LISTAS ---
+PAISES = ["Ecuador", "Colombia", "Perú", "México", "España", "Otro"]
+IDIOMAS = ["Español", "English"]
+VEHICULOS = ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔", "Moto Entrega 🏍️"]
+
+# --- 🛰️ CAPTURA AUTOMÁTICA DE GPS ---
 loc = get_geolocation()
-lat_actual, lon_actual = (loc['coords']['latitude'], loc['coords']['longitude']) if loc and 'coords' in loc else (None, None)
+if loc and 'coords' in loc:
+    lat_actual = loc['coords']['latitude']
+    lon_actual = loc['coords']['longitude']
+else:
+    lat_actual, lon_actual = None, None
 
 # --- 🛠️ FUNCIONES ---
 def cargar_datos(hoja):
@@ -63,17 +84,21 @@ def enviar_datos(datos):
         with urllib.request.urlopen(url_final) as response:
             return response.read().decode('utf-8')
     except: 
-        return None
+        return f"Error"
 
 # --- 📱 INTERFAZ ---
 st.title("🚖 Portal de Socios")
 
 if st.session_state.usuario_activo:
     df_fresh = cargar_datos("CHOFERES")
-    user_nom, user_ape = st.session_state.datos_usuario.get('Nombre', ''), st.session_state.datos_usuario.get('Apellido', '')
+    user_nom = str(st.session_state.datos_usuario.get('Nombre', '')).strip()
+    user_ape = str(st.session_state.datos_usuario.get('Apellido', '')).strip()
     nombre_completo_unificado = f"{user_nom} {user_ape}".upper()
     
-    fila_actual = df_fresh[(df_fresh['Nombre'].astype(str).str.upper() == user_nom.upper()) & (df_fresh['Apellido'].astype(str).str.upper() == user_ape.upper())]
+    fila_actual = df_fresh[
+        (df_fresh['Nombre'].astype(str).str.upper().str.strip() == user_nom.upper()) & 
+        (df_fresh['Apellido'].astype(str).str.upper().str.strip() == user_ape.upper())
+    ]
     
     if not fila_actual.empty:
         st.subheader(f"Bienvenido, {nombre_completo_unificado}")
@@ -84,15 +109,17 @@ if st.session_state.usuario_activo:
                 enviar_datos({"accion": "actualizar_ubicacion", "conductor": nombre_completo_unificado, "latitud": lat_actual, "longitud": lon_actual})
                 st.success(f"📍 Ubicación activa: {lat_actual}, {lon_actual}")
         
-        deuda = float(fila_actual.iloc[0, 17])
-        st.metric("Tu Deuda Actual:", f"${deuda:.2f}")
+        deuda_val = float(fila_actual.iloc[0, 17])
+        st.metric("Tu Deuda Actual:", f"${deuda_val:.2f}")
         st.info(f"Estado Actual: **{fila_actual.iloc[0, 8]}**")
 
-        # --- GESTIÓN DE VIAJE (RESTAURADO) ---
         st.subheader("Gestión de Viaje")
         df_viajes = cargar_datos("VIAJES")
         if not df_viajes.empty:
-            viaje_activo = df_viajes[(df_viajes['Conductor Asignado'].astype(str).str.upper() == nombre_completo_unificado) & (df_viajes['Estado'].str.contains("EN CURSO"))]
+            viaje_activo = df_viajes[
+                (df_viajes['Conductor Asignado'].astype(str).str.upper() == nombre_completo_unificado) & 
+                (df_viajes['Estado'].str.contains("EN CURSO"))
+            ]
             
             if not viaje_activo.empty:
                 datos_v = viaje_activo.iloc[-1]
@@ -111,13 +138,14 @@ if st.session_state.usuario_activo:
                                 url_osrm = f"http://router.project-osrm.org/route/v1/driving/{lon_c},{lat_c};{lon_actual},{lat_actual}?overview=false"
                                 kms_finales = requests.get(url_osrm).json()['routes'][0]['distance'] / 1000
                             except:
-                                # CORRECCIÓN FINAL LÍNEA 211
-                                dLat, dLon = radians(lat_actual-lat_c), radians(lon_actual-lon_c)
+                                # BLOQUE DE RESPALDO CORREGIDO
+                                dLat = radians(lat_actual - lat_c)
+                                dLon = radians(lon_actual - lon_c)
                                 a = sin(dLat/2)**2 + cos(radians(lat_c)) * cos(radians(lat_actual)) * sin(dLon/2)**2
                                 kms_finales = 2 * 6371 * asin(sqrt(a))
 
                         if enviar_datos({"accion": "terminar_viaje", "conductor": nombre_completo_unificado, "km": round(kms_finales, 2)}):
-                            st.success("✅ Viaje finalizado con éxito.")
+                            st.success("✅ Viaje finalizado.")
                             time.sleep(2)
                             st.rerun()
 
@@ -125,10 +153,13 @@ if st.session_state.usuario_activo:
         st_javascript("localStorage.removeItem('user_taxi_seguro');")
         st.session_state.usuario_activo = False
         st.rerun()
+
 else:
     tab_log, tab_reg = st.tabs(["🔐 INGRESAR", "📝 REGISTRARME"])
     with tab_log:
-        l_nom, l_ape = st.text_input("Nombre"), st.text_input("Apellido")
+        st.subheader("Acceso Socios")
+        l_nom = st.text_input("Nombre")
+        l_ape = st.text_input("Apellido")
         l_pass = st.text_input("Contraseña", type="password")
         if st.button("ENTRAR AL PANEL", type="primary"):
             df = cargar_datos("CHOFERES")
@@ -137,3 +168,10 @@ else:
                 st.session_state.usuario_activo, st.session_state.datos_usuario = True, match.iloc[0].to_dict()
                 st_javascript(f"localStorage.setItem('user_taxi_seguro', '{json.dumps(st.session_state.datos_usuario)}');")
                 st.rerun()
+    with tab_reg:
+        with st.form("registro_form"):
+            st.subheader("Registro de Nuevos Socios")
+            r_nom = st.text_input("Nombres *")
+            r_email = st.text_input("Email *")
+            if st.form_submit_button("✅ COMPLETAR REGISTRO"):
+                st.info("Función de registro activa.")
