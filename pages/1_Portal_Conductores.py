@@ -307,13 +307,13 @@ else:
                        (df['Apellido'].astype(str).str.upper() == l_ape.upper()) & 
                        (df['Clave'].astype(str) == l_pass)]
             if not match.empty:
-            # Todo este bloque debe estar alineado bajo la misma columna
+            # 12 espacios desde el borde
             datos = match.iloc[0].to_dict()
             st.session_state.usuario_activo = True
             st.session_state.datos_usuario = datos
             
-            # --- GUARDADO EN NAVEGADOR PARA AUTO-LOGIN ---
             try:
+                # 16 espacios desde el borde
                 datos_json = json.dumps(datos)
                 st_javascript(f"localStorage.setItem('user_taxi_seguro', '{datos_json}');")
             except:
