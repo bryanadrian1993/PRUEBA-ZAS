@@ -10,7 +10,9 @@ import math
 import re
 import pydeck as pdk
 from streamlit_autorefresh import st_autorefresh
-
+import io
+import base64
+from PIL import Image
 # --- ⚙️ CONFIGURACIÓN DEL SISTEMA ---
 st.set_page_config(page_title="TAXI SEGURO", page_icon="🚖", layout="centered")
 
@@ -268,9 +270,21 @@ if st.session_state.viaje_confirmado:
 
         st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 ID: {dp["id"]}</span></div>', unsafe_allow_html=True)
         
-        if dp['foto'] and "http" in dp['foto']:
-            id_f = re.search(r'[-\w]{25,}', dp['foto']).group() if re.search(r'[-\w]{25,}', dp['foto']) else ""
-            if id_f: st.markdown(f'<div style="text-align:center; margin-bottom:15px;"><img src="https://lh3.googleusercontent.com/u/0/d/{id_f}" style="width:130px;height:130px;border-radius:50%;object-fit:cover;border:4px solid #FF9800;"></div>', unsafe_allow_html=True)
+        # --- 📸 MOSTRAR FOTO REAL DEL CONDUCTOR ---
+        foto_data = dp.get('foto', "SIN_FOTO")
+
+        st.markdown('<div style="text-align:center; margin-bottom:15px;">', unsafe_allow_html=True)
+        if foto_data and foto_data != "SIN_FOTO" and len(str(foto_data)) > 100:
+            try:
+                # Decodifica la imagen Base64
+                img_bytes = base64.b64decode(foto_data)
+                st.image(io.BytesIO(img_bytes), width=150)
+            except:
+                st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=130)
+        else:
+            # Foto por defecto si no hay una guardada
+            st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=130)
+        st.markdown('</div>', unsafe_allow_html=True)
 
         st.success(f"✅ Conductor **{dp['chof']}** asignado.")
         
