@@ -196,26 +196,49 @@ if st.session_state.usuario_activo:
             st.write(f"📍 **Destino:** {datos_v['Referencia']}")
             st.markdown(f"[🗺️ Ver Mapa]({datos_v['Mapa']})")
 
+            # --- CÁLCULO DE DISTANCIA REAL GPS ---
             if st.button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True):
-                with st.spinner("Cerrando viaje..."):
-                    enviar_datos({"accion": "terminar_viaje", "conductor": nombre_completo_unificado})
-                    st.success("✅ Viaje finalizado correctamente")
-                    st.rerun()
-        
-        else:
-            # CASO B: NO HAY PASAJERO -> Mostramos botones de Disponibilidad
-            if "OCUPADO" in estado_actual:
-                st.info("Estás en estado OCUPADO (Sin pasajero de App).")
+                with st.spinner("Calculando distancia y cerrando viaje..."):
+                    
+                    # 1. Valor por defecto de seguridad
+                    kms_finales = 5.0 
+                    
+                    # 2. Intentamos calcular la distancia real entre Cliente y Conductor
+                    if lat_actual and lon_actual:
+                        try:
+                            # Extraemos las coordenadas del cliente desde el link de Google Maps
+                            # Tu link es: https://www.google.com/maps/search/?api=1&query=LAT,LON
+                            link_mapa = str(datos_v['Mapa'])
+                            lat_cliente = float(link_mapa.split('query=')[1].split(',')[0])
+                            lon_cliente = float(link_mapa.split('query=')[1].split(',')[1])
+                            
+                            # Fórmula Matemática Haversine para distancia en la Tierra
+                            from math import radians, cos, sin, asin, sqrt
+                            def haversine(lat1, lon1, lat2, lon2):
+                                R = 6371 # Radio de la Tierra en km
+                                dLat = radians(lat2 - lat1)
+                                dLon = radians(lon2 - lon1)
+                                a = sin(dLat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dLon/2)**2
+                                return 2 * R * asin(sqrt(a))
+                            
+                            kms_finales = haversine(lat_cliente, lon_cliente, lat_actual, lon_actual)
+                            
+                            # Si es un viaje muy corto, cobramos un mínimo de 1km para ser justos
+                            if kms_finales < 0.5: kms_finales = 1.0
+                        except:
+                            kms_finales = 5.0 # Si el link de mapa falla, vuelve al defecto
 
-            col_lib, col_ocu = st.columns(2)
-            with col_lib:
-                if st.button("🟢 PONERME LIBRE", use_container_width=True):
-                    enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "LIBRE"})
-                    st.rerun()
-            with col_ocu:
-                if st.button("🔴 PONERME OCUPADO", use_container_width=True):
-                    enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "OCUPADO"})
-                    st.rerun()
+                    # 3. ENVIAMOS LOS KM REALES AL SCRIPT
+                    res = enviar_datos({
+                        "accion": "terminar_viaje", 
+                        "conductor": nombre_completo_unificado,
+                        "km": round(kms_finales, 2)  # <--- DATO REAL PARA TU PANEL ADMIN
+                    })
+                    
+                    if res:
+                        st.success(f"✅ Viaje finalizado: {kms_finales:.2f} km recorridos.")
+                        time.sleep(2)
+                        st.rerun()
         
         st.divider()
     with st.expander("📜 Ver Mi Historial de Viajes"):
