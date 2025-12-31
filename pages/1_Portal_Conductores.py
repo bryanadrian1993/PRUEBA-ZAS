@@ -21,15 +21,35 @@ st.set_page_config(page_title="Portal Conductores", page_icon="🚖", layout="ce
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbxvsj1h8xSsbyIlo7enfZWO2Oe1IVJer3KHpUO_o08gkRGJKmFnH0wNRvQRa38WWKgv/exec"
 import requests 
+# --- 💾 FUNCIÓN DE PERSISTENCIA ---
+from streamlit_javascript import st_javascript
+import json
 
+def gestionar_autologin():
+    # Intentamos recuperar los datos del almacenamiento local del navegador
+    user_data = st_javascript("localStorage.getItem('user_taxi_seguro');")
+    if user_data and user_data != "null":
+        try:
+            return json.loads(user_data)
+        except:
+            return None
+    return None
 def enviar_datos(params):
     try:
         requests.post(URL_SCRIPT, params=params)
     except Exception as e:
         st.error(f"Error de conexión: {e}")
-# --- 🔄 INICIALIZAR SESIÓN PERSISTENTE ---
-if 'usuario_activo' not in st.session_state: st.session_state.usuario_activo = False
-if 'datos_usuario' not in st.session_state: st.session_state.datos_usuario = {}
+# --- 🔄 INICIALIZAR SESIÓN CON AUTO-LOGIN ---
+if 'usuario_activo' not in st.session_state:
+    datos_recuperados = gestionar_autologin()
+    if datos_recuperados:
+        st.session_state.usuario_activo = True
+        st.session_state.datos_usuario = datos_recuperados
+    else:
+        st.session_state.usuario_activo = False
+
+if 'datos_usuario' not in st.session_state:
+    st.session_state.datos_usuario = {}
 
 # ESTA LÍNEA ES NUEVA: Guardará la foto subida para que el Excel no la borre
 if 'foto_blindada' not in st.session_state: st.session_state.foto_blindada = None
@@ -264,6 +284,7 @@ if st.session_state.usuario_activo:
             st.write("Cargando datos...")    
     
     if st.button("🔒 CERRAR SESIÓN"):
+        st_javascript("localStorage.removeItem('user_taxi_seguro');")
         st.session_state.usuario_activo = False
         st.rerun()
     st.stop()
@@ -286,10 +307,16 @@ else:
                        (df['Apellido'].astype(str).str.upper() == l_ape.upper()) & 
                        (df['Clave'].astype(str) == l_pass)]
             
-            if not match.empty:
-                st.session_state.usuario_activo = True
-                st.session_state.datos_usuario = match.iloc[0].to_dict()
-                st.rerun()
+            if not match.empty: # Esta es tu línea 309 original
+            datos = match.iloc[0].to_dict()
+            st.session_state.usuario_activo = True
+            st.session_state.datos_usuario = datos
+            
+            # --- NUEVO: GUARDAR EN EL NAVEGADOR PARA SIEMPRE ---
+            datos_json = json.dumps(datos)
+            st_javascript(f"localStorage.setItem('user_taxi_seguro', '{datos_json}');")
+            
+            st.rerun()
             else:
                 st.error("❌ Datos incorrectos o usuario no encontrado.")
     st.markdown("---") 
