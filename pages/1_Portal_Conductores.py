@@ -308,6 +308,7 @@ else:
                        (df['Apellido'].astype(str).str.upper() == l_ape.upper()) & 
                        (df['Clave'].astype(str) == l_pass)]
             if not match.empty:
+            # Todo este bloque debe estar alineado bajo la misma columna
             datos = match.iloc[0].to_dict()
             st.session_state.usuario_activo = True
             st.session_state.datos_usuario = datos
