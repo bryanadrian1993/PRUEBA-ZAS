@@ -192,10 +192,12 @@ if st.session_state.usuario_activo:
     if st.button("🔒 CERRAR SESIÓN"):
         st.session_state.usuario_activo = False
         st.rerun()
-
+    st.stop()
 else:
     # --- PANTALLA INICIAL: LOGIN Y REGISTRO ---
     tab_log, tab_reg = st.tabs(["🔐 INGRESAR", "📝 REGISTRARME"])
+
+
     
     with tab_log:
         st.subheader("Acceso Socios")
