@@ -170,7 +170,7 @@ if st.session_state.usuario_activo:
         col_m2.metric("🚦 Estado Actual", estado_actual)
 
         # ==========================================
-        # 🚀 BLOQUE INTELIGENTE: GESTIÓN DE VIAJE (PAQUETE 2)
+        # 🚀 BLOQUE INTELIGENTE: GESTIÓN DE  (PAQUETE 2)
         # ==========================================
         st.subheader("Gestión de Viaje")
         
