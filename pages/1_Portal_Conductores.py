@@ -3,7 +3,7 @@ import pandas as pd
 import urllib.parse
 import urllib.request
 import base64
-import math
+from math import radians, cos, sin, asin, sqrt
 import os
 import time
 import io                      
