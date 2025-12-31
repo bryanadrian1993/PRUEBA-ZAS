@@ -27,9 +27,16 @@ def enviar_datos(params):
         requests.post(URL_SCRIPT, params=params)
     except Exception as e:
         st.error(f"Error de conexión: {e}")
-# --- 🔄 INICIALIZAR SESIÓN ---
-if 'usuario_activo' not in st.session_state: st.session_state.usuario_activo = False
-if 'datos_usuario' not in st.session_state: st.session_state.datos_usuario = {}
+# --- 🔄 INICIALIZAR SESIÓN PERSISTENTE ---
+if 'usuario_activo' not in st.session_state:
+    st.session_state.usuario_activo = False
+
+if 'datos_usuario' not in st.session_state:
+    st.session_state.datos_usuario = {}
+
+# Nueva variable para bloquear el Excel después de subir una foto
+if 'foto_temporal' not in st.session_state:
+    st.session_state.foto_temporal = None
 
 # --- 📋 LISTAS ---
 PAISES = ["Ecuador", "Colombia", "Perú", "México", "España", "Otro"]
@@ -94,16 +101,19 @@ if st.session_state.usuario_activo:
     # --- LÓGICA DE ACTUALIZACIÓN DE UBICACIÓN ---
     st.subheader(f"Bienvenido, {nombre_completo_unificado}")
 
-# --- 📸 SECCIÓN DE FOTO DE PERFIL CON BLOQUEO DE SOBREESCRITURA ---
-    # Paso 1: Intentamos obtener la foto de la memoria de la sesión
-    foto_mostrar = st.session_state.datos_usuario.get('Foto_Perfil', 'SIN_FOTO')
-    
-    # Paso 2: SOLO si la memoria está vacía (< 100 caracteres), cargamos desde Excel
-    if len(str(foto_mostrar)) < 100 and not fila_actual.empty:
-        foto_desde_excel = fila_actual.iloc[0]['Foto_Perfil']
-        if str(foto_desde_excel) != "nan" and len(str(foto_desde_excel)) > 100:
-            foto_mostrar = foto_desde_excel
-            st.session_state.datos_usuario['Foto_Perfil'] = foto_mostrar
+# --- 📸 VISUALIZACIÓN CON BLOQUEO ANTI-RESET ---
+    # 1. ¿Hay una foto recién subida en esta sesión?
+    if st.session_state.foto_temporal:
+        foto_mostrar = st.session_state.foto_temporal
+    else:
+        # 2. Si no, buscamos en la memoria general o el Excel
+        foto_mostrar = st.session_state.datos_usuario.get('Foto_Perfil', 'SIN_FOTO')
+        
+        if (len(str(foto_mostrar)) < 100) and not fila_actual.empty:
+            foto_excel = fila_actual.iloc[0]['Foto_Perfil']
+            if str(foto_excel) != "nan" and len(str(foto_excel)) > 100:
+                foto_mostrar = foto_excel
+                st.session_state.datos_usuario['Foto_Perfil'] = foto_mostrar
 
     col_img, col_btn = st.columns([1, 2])
     with col_img:
@@ -138,9 +148,9 @@ if st.session_state.usuario_activo:
                     if res:
                         st.success("✅ ¡Foto guardada!")
                         
-                        # ESTA ES LA LÍNEA MÁS IMPORTANTE:
-                        # Guarda en la memoria del navegador para que no se borre al recargar
+                        # GUARDADO DOBLE: En los datos del usuario y en el bloqueo temporal
                         st.session_state.datos_usuario['Foto_Perfil'] = foto_b64
+                        st.session_state.foto_temporal = foto_b64
                         
                         time.sleep(1) 
                         st.rerun()
