@@ -196,47 +196,43 @@ if st.session_state.usuario_activo:
             st.write(f"📍 **Destino:** {datos_v['Referencia']}")
             st.markdown(f"[🗺️ Ver Mapa]({datos_v['Mapa']})")
 
-            # --- CÁLCULO DE DISTANCIA REAL GPS ---
+            # --- CÁLCULO DE DISTANCIA POR CALLES (OSRM GRATIS) ---
             if st.button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True):
-                with st.spinner("Calculando distancia y cerrando viaje..."):
+                with st.spinner("Calculando distancia real por calles..."):
                     
-                    # 1. Valor por defecto de seguridad
-                    kms_finales = 5.0 
+                    kms_finales = 5.0 # Valor de respaldo
                     
-                    # 2. Intentamos calcular la distancia real entre Cliente y Conductor
                     if lat_actual and lon_actual:
                         try:
-                            # Extraemos las coordenadas del cliente desde el link de Google Maps
-                            # Tu link es: https://www.google.com/maps/search/?api=1&query=LAT,LON
+                            # 1. Extraemos coordenadas del cliente
                             link_mapa = str(datos_v['Mapa'])
-                            lat_cliente = float(link_mapa.split('query=')[1].split(',')[0])
-                            lon_cliente = float(link_mapa.split('query=')[1].split(',')[1])
+                            lat_c = float(link_mapa.split('query=')[1].split(',')[0])
+                            lon_c = float(link_mapa.split('query=')[1].split(',')[1])
                             
-                            # Fórmula Matemática Haversine para distancia en la Tierra
+                            # 2. Llamamos a OSRM (Servicio de rutas gratuito)
+                            url_osrm = f"http://router.project-osrm.org/route/v1/driving/{lon_c},{lat_c};{lon_actual},{lat_actual}?overview=false"
+                            res_osrm = requests.get(url_osrm).json()
+                            
+                            # 3. Extraemos la distancia en metros y pasamos a Kilómetros
+                            kms_finales = res_osrm['routes'][0]['distance'] / 1000
+                            
+                            if kms_finales < 0.5: kms_finales = 1.0 # Mínimo 1km
+                        except Exception as e:
+                            # Si falla el internet o el servicio, usamos línea recta de emergencia
                             from math import radians, cos, sin, asin, sqrt
-                            def haversine(lat1, lon1, lat2, lon2):
-                                R = 6371 # Radio de la Tierra en km
-                                dLat = radians(lat2 - lat1)
-                                dLon = radians(lon2 - lon1)
-                                a = sin(dLat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dLon/2)**2
-                                return 2 * R * asin(sqrt(a))
-                            
-                            kms_finales = haversine(lat_cliente, lon_cliente, lat_actual, lon_actual)
-                            
-                            # Si es un viaje muy corto, cobramos un mínimo de 1km para ser justos
-                            if kms_finales < 0.5: kms_finales = 1.0
-                        except:
-                            kms_finales = 5.0 # Si el link de mapa falla, vuelve al defecto
+                            dLat, dLon = radians(lat_actual-lat_c), radians(lon_actual-lon_c)
+                            a = sin(dLat/2)**2 + cos(radians(lat_c)) * cos(radians(lat_actual)) * sin(dLon/2)**2
+                            kms_finales = 2 * 6371 * asin(sqrt(a))
 
-                    # 3. ENVIAMOS LOS KM REALES AL SCRIPT
+                    # 4. ENVIAMOS LOS KM REALES (CALLES) AL SCRIPT
                     res = enviar_datos({
                         "accion": "terminar_viaje", 
                         "conductor": nombre_completo_unificado,
-                        "km": round(kms_finales, 2)  # <--- DATO REAL PARA TU PANEL ADMIN
+                        "km": round(kms_finales, 2)
                     })
                     
                     if res:
-                        st.success(f"✅ Viaje finalizado: {kms_finales:.2f} km recorridos.")
+                        st.success(f"✅ Viaje finalizado: {kms_finales:.2f} km por calles.")
                         time.sleep(2)
                         st.rerun()
         
