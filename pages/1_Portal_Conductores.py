@@ -216,7 +216,31 @@ else:
                 st.rerun()
             else:
                 st.error("❌ Datos incorrectos o usuario no encontrado.")
-
+    st.markdown("---") 
+with st.expander("¿Olvidaste tu contraseña?"):
+    st.info("Ingresa tu correo registrado para recibir tu clave:")
+    email_recup = st.text_input("Tu Email", key="email_recup")
+    
+    if st.button("📧 Recuperar Clave"):
+        if "@" in email_recup:
+            with st.spinner("Conectando con el sistema..."):
+                try:
+                    # Petición al Script de Google
+                    resp = requests.post(URL_SCRIPT, params={
+                        "accion": "recuperar_clave",
+                        "email": email_recup
+                    })
+                    
+                    if "CORREO_ENVIADO" in resp.text:
+                        st.success("✅ ¡Enviado! Revisa tu correo (Bandeja de entrada o Spam).")
+                    elif "EMAIL_NO_ENCONTRADO" in resp.text:
+                        st.error("❌ Ese correo no está registrado como socio.")
+                    else:
+                        st.error("Error de conexión.")
+                except:
+                    st.error("Error al conectar con el servidor.")
+        else:
+            st.warning("Escribe un correo válido.")
     with tab_reg:
         with st.form("registro_form"):
             st.subheader("Registro de Nuevos Socios")
