@@ -19,7 +19,7 @@ if st.session_state.get('viaje_confirmado', False):
     st_autorefresh(interval=10000, key="datarefresh")
 
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
-URL_SCRIPT = "https://script.google.com/macros/s/AKfycbwzOVH8c8f9WEoE4OJOTIccz_EgrOpZ8ySURTVRwi0bnQhFnWVdgfX1W8ivTIu5dFfs/exec"
+URL_SCRIPT = "https://script.google.com/macros/s/AKfycbzRpTrl-iL307vikpVJ9ESjs_72NL4yRgGCAmVvwIs6pp9Ht2F1Pq7vBUfaLpWxv_2k/exec"
 LAT_BASE, LON_BASE = -0.466657, -76.989635
 
 if 'viaje_confirmado' not in st.session_state: st.session_state.viaje_confirmado = False
@@ -164,28 +164,34 @@ if not st.session_state.viaje_confirmado:
 
     if enviar and nombre_cli and ref_cli:
         with st.spinner("🔄 Buscando unidad..."):
+            # Buscamos al chofer más cercano
             chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
             
-            # --- CORRECCIÓN FINAL ---
-            # 'chof' aquí es una Serie de Pandas (la fila de Juan Perez), no un DataFrame vacío
             if chof is not None:
-                # Accedemos directo a sus datos
                 nombre_chof = f"{chof['Nombre']} {chof['Apellido']}"
-                
                 id_v = f"TX-{random.randint(1000, 9999)}"
                 mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
                 
-                # Enviamos a Google Sheets
+                # 1. REGISTRO EN HOJA VIAJES (Llenamos columnas A hasta J)
                 enviar_datos_a_sheets({
                     "accion": "registrar_pedido", 
-                    "cliente": nombre_cli, 
+                    "cliente": nombre_cli,
+                    "tel_cliente": celular_input,  # Dato columna C
                     "referencia": ref_cli, 
+                    "mapa": mapa_url,
+                    "conductor": nombre_chof,
+                    "tel_conductor": t_chof,       # Dato columna I
+                    "id_viaje": id_v
+                })
+                
+                # 2. BLOQUEO DE CHOFER (Lo pone OCUPADO)
+                enviar_datos_a_sheets({
+                    "accion": "cambiar_estado", 
                     "conductor": nombre_chof, 
-                    "id_viaje": id_v, 
-                    "mapa": mapa_url
+                    "estado": "OCUPADO"
                 }) 
                 
-                # Guardamos en sesión
+                # Guardamos datos en sesión y recargamos
                 st.session_state.viaje_confirmado = True
                 st.session_state.datos_pedido = {
                     "chof": nombre_chof, 
@@ -196,8 +202,8 @@ if not st.session_state.viaje_confirmado:
                     "mapa": mapa_url, 
                     "lat_cli": lat_actual, 
                     "lon_cli": lon_actual, 
-                    "nombre": nombre_cli,
-                    "ref": ref_cli  # Agregado para que funcione el botón de WhatsApp
+                    "nombre": nombre_cli, 
+                    "ref": ref_cli
                 }
                 st.rerun()
             else:
