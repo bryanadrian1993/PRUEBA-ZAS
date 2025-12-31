@@ -97,19 +97,17 @@ if st.session_state.usuario_activo:
     # --- LÓGICA DE ACTUALIZACIÓN DE UBICACIÓN ---
     st.subheader(f"Bienvenido, {nombre_completo_unificado}")
 
-# --- 📸 VISUALIZACIÓN CON ESCUDO DE MEMORIA ---
-    # Paso 1: Revisamos si hay una foto en el escudo (la que acabas de subir)
-    if st.session_state.foto_blindada:
-        foto_mostrar = st.session_state.foto_blindada
-    else:
-        # Paso 2: Si no hay escudo, buscamos en la sesión o en el Excel
-        foto_mostrar = st.session_state.datos_usuario.get('Foto_Perfil', 'SIN_FOTO')
-        
-        if (len(str(foto_mostrar)) < 100) and not fila_actual.empty:
-            foto_excel = fila_actual.iloc[0]['Foto_Perfil']
-            if str(foto_excel) != "nan" and len(str(foto_excel)) > 100:
-                foto_mostrar = foto_excel
-                st.session_state.datos_usuario['Foto_Perfil'] = foto_mostrar
+# --- 📸 VISUALIZACIÓN DE FOTO SIN RECARGA ---
+    # Paso 1: Intentamos sacar la foto de la memoria de la sesión primero
+    # Esto asegura que si acabas de subir una, esa sea la que se muestre
+    foto_mostrar = st.session_state.datos_usuario.get('Foto_Perfil', 'SIN_FOTO')
+
+    # Paso 2: Solo si la sesión está vacía, buscamos en el Excel
+    if (not foto_mostrar or foto_mostrar == "SIN_FOTO") and not fila_actual.empty:
+        foto_excel = fila_actual.iloc[0]['Foto_Perfil']
+        if str(foto_excel) != "nan" and len(str(foto_excel)) > 100:
+            foto_mostrar = foto_excel
+            st.session_state.datos_usuario['Foto_Perfil'] = foto_mostrar
 
     col_img, col_btn = st.columns([1, 2])
     with col_img:
@@ -128,7 +126,7 @@ if st.session_state.usuario_activo:
         
         if archivo_nuevo:
             if st.button("💾 GUARDAR NUEVA FOTO"):
-                with st.spinner("Actualizando perfil..."):
+                with st.spinner("Subiendo imagen..."):
                     img = Image.open(archivo_nuevo).convert("RGB")
                     img = img.resize((150, 150)) 
                     buffered = io.BytesIO()
@@ -142,14 +140,11 @@ if st.session_state.usuario_activo:
                     })
                     
                     if res:
-                        st.success("✅ ¡Foto guardada!")
-                        
-                        # ACTUALIZACIÓN DOBLE: En la sesión y en la caja fuerte temporal
+                        # ACTUALIZACIÓN LOCAL INMEDIATA
+                        # Cambiamos la foto en la memoria para que el círculo cambie al instante
                         st.session_state.datos_usuario['Foto_Perfil'] = foto_b64
-                        st.session_state.foto_temporal = foto_b64
-                        
-                        time.sleep(1) 
-                        st.rerun()
+                        st.success("✅ ¡Foto actualizada! El cambio es permanente.")
+                        # NO usamos st.rerun() para que el Excel lento no nos pise la foto
     st.write("---") # Separador visual antes del GPS
     # Añadimos 'value=True' para que intente conectar apenas entre
     if st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True):
