@@ -80,7 +80,7 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
     df_c, df_u = cargar_datos("CHOFERES"), cargar_datos("UBICACIONES")
     if df_c.empty or df_u.empty: return None, None, None, "S/P"
     
-    # 1. Normalizamos encabezados a MAYÚSCULAS para evitar errores
+    # 1. Normalizamos encabezados a MAYÚSCULAS
     df_c.columns = df_c.columns.str.strip().str.upper()
     tipo_b = tipo_sol.split(" ")[0].upper()
 
@@ -110,23 +110,12 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
             except: continue
 
     if mejor is not None:
-        # 4. EXTRACCIÓN FINAL DE DATOS (Usando mayúsculas para evitar KeyError)
-        raw_t = str(mejor.get('TELEFONO', '')).split('.')[0].strip()
-        t_limpio = re.sub(r"[^0-9+]", "", raw_t)
-        
-        # Formateo de teléfono
-        if len(t_limpio) < 5: 
-            t = "0000000000"
-        else:
-            if t_limpio.startswith("+"): 
-                t = t_limpio.replace("+", "")
-            else:
-                cod = "593" # Código por defecto Ecuador
-                t = cod + t_limpio[1:] if t_limpio.startswith("0") else cod + t_limpio
-        
+        # 4. EXTRACCIÓN CON MAYÚSCULAS PARA EVITAR EL KEYERROR
+        t = str(mejor.get('TELEFONO', '0000000000')).split('.')[0].strip()
         foto = str(mejor.get('FOTO_PERFIL', 'SIN_FOTO'))
         placa = str(mejor.get('PLACA', 'S/P'))
         
+        # Devolvemos el objeto 'mejor' con sus llaves normalizadas
         return mejor, t, foto, placa
         
     return None, None, None, "S/P"
