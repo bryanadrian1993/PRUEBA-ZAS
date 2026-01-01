@@ -133,41 +133,42 @@ if not st.session_state.viaje_confirmado:
         enviar = st.form_submit_button("🚖 SOLICITAR UNIDAD")
 
     if enviar and nombre_cli and ref_cli:
-    with st.spinner("🔄 Buscando unidad..."):
-        chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
-        
-        if chof is not None:
-            # Sincronizamos nombres con el Script de Google
-            nombre_chof = f"{chof['NOMBRE']} {chof['APELLIDO']}" # Usar mayúsculas
-            id_v = f"TX-{random.randint(1000, 9999)}"
-            mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
+        with st.spinner("🔄 Buscando unidad..."):
+            chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
             
-            # 🚀 ESTA ES LA LLAMADA CRÍTICA AL EXCEL
-            res = enviar_datos_a_sheets({
-                "accion": "registrar_pedido", # Debe coincidir con el Script
-                "id_viaje": id_v,
-                "cliente": nombre_cli,
-                "tel_cliente": celular_input,
-                "referencia": ref_cli,
-                "conductor": nombre_chof,
-                "tel_conductor": t_chof,
-                "mapa": mapa_url
-            })
-            
-            if res != "Error":
-                # Cambiamos al chofer a OCUPADO inmediatamente
-                enviar_datos_a_sheets({"accion": "cambiar_estado", "conductor": nombre_chof, "estado": "OCUPADO"})
+            if chof is not None:
+                # Sincronizamos nombres con el Script de Google
+                nombre_chof = f"{chof['NOMBRE']} {chof['APELLIDO']}" # Usar mayúsculas
+                id_v = f"TX-{random.randint(1000, 9999)}"
+                mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
                 
-                st.session_state.viaje_confirmado = True
-                st.session_state.datos_pedido = {
-                    "chof": nombre_chof, "t_chof": t_chof, "foto": foto_chof, 
-                    "placa": placa, "id": id_v, "mapa": mapa_url, 
-                    "lat_cli": lat_actual, "lon_cli": lon_actual, 
-                    "nombre": nombre_cli, "ref": ref_cli
-                }
-                st.rerun()
-            else:
-                st.error("❌ No se pudo conectar con el servidor de viajes.")
+                # 🚀 REGISTRAMOS EN LA HOJA "VIAJES"
+                res = enviar_datos_a_sheets({
+                    "accion": "registrar_pedido", 
+                    "id_viaje": id_v,
+                    "cliente": nombre_cli,
+                    "tel_cliente": celular_input,
+                    "referencia": ref_cli,
+                    "conductor": nombre_chof,
+                    "tel_conductor": t_chof,
+                    "mapa": mapa_url
+                })
+                
+                if res != "Error":
+                    # Cambiamos al chofer a OCUPADO inmediatamente en la hoja CHOFERES
+                    enviar_datos_a_sheets({"accion": "cambiar_estado", "conductor": nombre_chof, "estado": "OCUPADO"})
+                    
+                    st.session_state.viaje_confirmado = True
+                    st.session_state.datos_pedido = {
+                        "chof": nombre_chof, "t_chof": t_chof, "foto": foto_chof, 
+                        "placa": placa, "id": id_v, "mapa": mapa_url, 
+                        "lat_cli": lat_actual, "lon_cli": lon_actual, 
+                        "nombre": nombre_cli, "ref": ref_cli
+                    }
+                    st.rerun()
+                else:
+                    st.error("❌ No se pudo conectar con el servidor de viajes.")
+
 if st.session_state.viaje_confirmado:
     dp = st.session_state.datos_pedido
     
