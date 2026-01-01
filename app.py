@@ -98,7 +98,7 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
 
     mejor, menor = None, float('inf')
     for _, chofer in libres.iterrows():
-        # USAMOS MAYÚSCULAS PARA NOMBRE Y APELLIDO
+        # USAMOS MAYÚSCULAS PARA EVITAR EL ERROR DE LA LÍNEA 93
         nom = f"{str(chofer['NOMBRE']).strip()} {str(chofer['APELLIDO']).strip()}".upper()
         ubi = df_u[df_u['Conductor'].astype(str).str.upper().str.strip() == nom]
         if not ubi.empty:
@@ -110,12 +110,10 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
             except: continue
 
     if mejor is not None:
-        # 4. EXTRACCIÓN CON MAYÚSCULAS PARA EVITAR EL KEYERROR
+        # 4. EXTRACCIÓN FINAL USANDO MAYÚSCULAS (Quita el error de la línea 120)
         t = str(mejor.get('TELEFONO', '0000000000')).split('.')[0].strip()
         foto = str(mejor.get('FOTO_PERFIL', 'SIN_FOTO'))
         placa = str(mejor.get('PLACA', 'S/P'))
-        
-        # Devolvemos el objeto 'mejor' con sus llaves normalizadas
         return mejor, t, foto, placa
         
     return None, None, None, "S/P"
