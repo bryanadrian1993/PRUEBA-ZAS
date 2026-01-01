@@ -229,19 +229,34 @@ if st.session_state.usuario_activo:
                         st.rerun()
 
         else:
-            # CASO B: NO HAY PASAJERO -> Mostramos botones de Disponibilidad
-            if "OCUPADO" in estado_actual:
-                st.info("Estás en estado OCUPADO (Sin pasajero de App).")
+            # CASO B: NO HAY PASAJERO -> Verificamos deuda antes de permitir trabajar
+            if deuda_actual >= 10.00:
+                st.error(f"🚫 CUENTA BLOQUEADA: Tu deuda (${deuda_actual:.2f}) supera el límite de $10.00")
+                st.info("Para volver a recibir viajes, por favor cancela tu saldo pendiente.")
+                st.markdown(f'''
+                    <a href="{LINK_PAYPAL}" target="_blank" style="text-decoration:none;">
+                        <div style="background-color:#0070ba;color:white;padding:12px;text-align:center;border-radius:10px;font-weight:bold;">
+                            💳 PAGAR DEUDA CON PAYPAL
+                        </div>
+                    </a>
+                ''', unsafe_allow_html=True)
+                
+                # Botón deshabilitado para evitar que el chofer se ponga LIBRE
+                st.button("🟢 PONERME LIBRE", disabled=True, help="Debes pagar tu deuda para activar este botón")
+            else:
+                # Si la deuda es menor a $10, permitimos cambiar estado normalmente
+                if "OCUPADO" in estado_actual:
+                    st.info("Estás en estado OCUPADO (Sin pasajero de App).")
 
-            col_lib, col_ocu = st.columns(2)
-            with col_lib:
-                if st.button("🟢 PONERME LIBRE", use_container_width=True):
-                    enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "LIBRE"})
-                    st.rerun()
-            with col_ocu:
-                if st.button("🔴 PONERME OCUPADO", use_container_width=True):
-                    enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "OCUPADO"})
-                    st.rerun()
+                col_lib, col_ocu = st.columns(2)
+                with col_lib:
+                    if st.button("🟢 PONERME LIBRE", use_container_width=True):
+                        enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "LIBRE"})
+                        st.rerun()
+                with col_ocu:
+                    if st.button("🔴 PONERME OCUPADO", use_container_width=True):
+                        enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "OCUPADO"})
+                        st.rerun()
         
         st.divider()
     with st.expander("📜 Ver Mi Historial de Viajes"):
