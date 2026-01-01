@@ -142,17 +142,20 @@ if not st.session_state.viaje_confirmado:
                 id_v = f"TX-{random.randint(1000, 9999)}"
                 mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
                 
-                # 🚀 REGISTRAMOS EN LA HOJA "VIAJES"
-                res = enviar_datos_a_sheets({
-                    "accion": "registrar_pedido", 
-                    "id_viaje": id_v,
-                    "cliente": nombre_cli,
-                    "tel_cliente": celular_input,
-                    "referencia": ref_cli,
-                    "conductor": nombre_chof,
-                    "tel_conductor": t_chof,
-                    "mapa": mapa_url
-                })
+                # 🚀 Registro del pedido en la hoja VIAJES
+            res = enviar_datos_a_sheets({
+                "accion": "registrar_pedido",
+                "id_viaje": id_v,
+                "cliente": nombre_cli,
+                "tel_cliente": celular_input,
+                "referencia": ref_cli,
+                "conductor": nombre_chof,
+                "tel_conductor": t_chof,
+                "mapa": mapa_url
+            })
+            
+            # DIAGNÓSTICO: Esto te mostrará en pantalla qué dice el Excel
+            st.write(f"Respuesta del servidor: {res}")
                 
                 if res != "Error":
                     # Cambiamos al chofer a OCUPADO inmediatamente en la hoja CHOFERES
