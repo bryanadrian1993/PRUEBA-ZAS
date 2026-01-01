@@ -98,7 +98,6 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
 
     mejor, menor = None, float('inf')
     for _, chofer in libres.iterrows():
-        # USAMOS MAYÚSCULAS PARA EVITAR EL ERROR DE LA LÍNEA 93
         nom = f"{str(chofer['NOMBRE']).strip()} {str(chofer['APELLIDO']).strip()}".upper()
         ubi = df_u[df_u['Conductor'].astype(str).str.upper().str.strip() == nom]
         if not ubi.empty:
@@ -110,7 +109,7 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
             except: continue
 
     if mejor is not None:
-        # 4. EXTRACCIÓN FINAL USANDO MAYÚSCULAS (Quita el error de la línea 120)
+        # 4. EXTRACCIÓN FINAL USANDO MAYÚSCULAS
         t = str(mejor.get('TELEFONO', '0000000000')).split('.')[0].strip()
         foto = str(mejor.get('FOTO_PERFIL', 'SIN_FOTO'))
         placa = str(mejor.get('PLACA', 'S/P'))
@@ -137,7 +136,8 @@ if not st.session_state.viaje_confirmado:
         with st.spinner("🔄 Buscando unidad..."):
             chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
             if chof is not None:
-                nombre_chof = f"{chof['Nombre']} {chof['Apellido']}"
+                # --- CORRECCIÓN LÍNEA 129: USAMOS MAYÚSCULAS ---
+                nombre_chof = f"{chof['NOMBRE']} {chof['APELLIDO']}"
                 id_v = f"TX-{random.randint(1000, 9999)}"
                 mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
                 enviar_datos_a_sheets({"accion": "registrar_pedido", "cliente": nombre_cli, "tel_cliente": celular_input, "referencia": ref_cli, "mapa": mapa_url, "conductor": nombre_chof, "tel_conductor": t_chof, "id_viaje": id_v})
@@ -151,10 +151,8 @@ if not st.session_state.viaje_confirmado:
 if st.session_state.viaje_confirmado:
     dp = st.session_state.datos_pedido
     
-    # --- 1. IDENTIFICADOR (image_d73bfd) ---
     st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 ID: {dp["id"]}</span></div>', unsafe_allow_html=True)
     
-    # --- 2. FOTO DEL CONDUCTOR ---
     foto_data = dp.get('foto', "SIN_FOTO")
     st.markdown('<div style="text-align:center; margin-bottom:15px;">', unsafe_allow_html=True)
     if foto_data and foto_data != "SIN_FOTO" and len(str(foto_data)) > 100:
@@ -167,7 +165,6 @@ if st.session_state.viaje_confirmado:
         st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=130)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- 3. MENSAJE Y BOTONES ---
     st.success(f"✅ Conductor **{dp['chof']}** asignado.")
     msg_wa = urllib.parse.quote(f"🚖 *PEDIDO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre']}\n📍 Ref: {dp['ref']}\n🗺️ *Mapa:* {dp['mapa']}")
     st.markdown(f'<a href="https://api.whatsapp.com/send?phone={dp["t_chof"]}&text={msg_wa}" target="_blank" style="background-color:#25D366;color:white;padding:15px;text-align:center;display:block;text-decoration:none;font-weight:bold;font-size:20px;border-radius:10px;">📲 CONTACTAR CONDUCTOR</a>', unsafe_allow_html=True)
@@ -178,7 +175,6 @@ if st.session_state.viaje_confirmado:
 
     st.write("---")
 
-    # --- 4. MAPA Y SEGUIMIENTO (AL FINAL - image_d73fde) ---
     try:
         df_u = cargar_datos("UBICACIONES")
         pos_t = df_u[df_u['Conductor'].astype(str).str.upper().str.strip() == str(dp['chof']).upper().strip()]
@@ -213,5 +209,4 @@ if st.session_state.viaje_confirmado:
     except Exception as e:
         st.info("⌛ Recibiendo coordenadas...")
 
-# --- 📧 PIE DE PÁGINA ---
 st.markdown('<div style="text-align:center; color:#555; font-size:15px; margin-top:10px; font-weight: bold;">📩 contacto: taxi-seguro-word@hotmail.com</div>', unsafe_allow_html=True)
