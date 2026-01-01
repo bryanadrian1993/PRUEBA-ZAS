@@ -189,7 +189,6 @@ if st.session_state.usuario_activo:
         if not viaje_activo.empty:
             # CASO A: HAY PASAJERO -> Mostramos SOLO el botón de Finalizar
             datos_v = viaje_activo.iloc[-1]
-            
             st.warning("🚖 TIENES UN PASAJERO A BORDO")
             st.write(f"👤 **Cliente:** {datos_v['Nombre del cliente']}")
             st.write(f"📞 **Tel:** {datos_v['Telefono']}")
@@ -197,11 +196,38 @@ if st.session_state.usuario_activo:
             st.markdown(f"[🗺️ Ver Mapa]({datos_v['Mapa']})")
 
             if st.button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True):
-                with st.spinner("Cerrando viaje..."):
-                    enviar_datos({"accion": "terminar_viaje", "conductor": nombre_completo_unificado})
-                    st.success("✅ Viaje finalizado correctamente")
-                    st.rerun()
-        
+                with st.spinner("Calculando distancia recorrida..."):
+                    kms_finales = 1.0 
+                    if lat_actual and lon_actual:
+                        try:
+                            # Obtenemos las coordenadas de inicio guardadas en el pedido
+                            link_mapa = str(datos_v['Mapa'])
+                            lat_cliente = float(link_mapa.split('query=')[1].split(',')[0])
+                            lon_cliente = float(link_mapa.split('query=')[1].split(',')[1])
+                            
+                            # Aplicamos Haversine para distancia real
+                            dLat = math.radians(lat_actual - lat_cliente)
+                            dLon = math.radians(lon_actual - lon_cliente)
+                            a = math.sin(dLat/2)**2 + math.cos(math.radians(lat_cliente)) * \
+                                math.cos(math.radians(lat_actual)) * math.sin(dLon/2)**2
+                            kms_finales = 2 * 6371 * math.asin(math.sqrt(a))
+                            
+                            if kms_finales < 0.5: kms_finales = 1.0 
+                        except:
+                            kms_finales = 5.0 
+
+                    # ENVIAMOS EL KM REAL AL EXCEL
+                    res = enviar_datos({
+                        "accion": "terminar_viaje", 
+                        "conductor": nombre_completo_unificado,
+                        "km": round(kms_finales, 2)
+                    })
+                    
+                    if res:
+                        st.success(f"✅ Viaje finalizado: {kms_finales:.2f} km.")
+                        time.sleep(2)
+                        st.rerun()
+
         else:
             # CASO B: NO HAY PASAJERO -> Mostramos botones de Disponibilidad
             if "OCUPADO" in estado_actual:
