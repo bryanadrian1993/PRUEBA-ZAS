@@ -80,7 +80,13 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
     df_c, df_u = cargar_datos("CHOFERES"), cargar_datos("UBICACIONES")
     if df_c.empty or df_u.empty: return None, None, None, "S/P"
     tipo_b = tipo_sol.split(" ")[0].upper()
-    libres = df_c[(df_c['Estado'].astype(str).str.upper() == 'LIBRE') & (df_c['Tipo_Vehiculo'].astype(str).str.upper().str.contains(tipo_b)) & (df_c['Deuda'].astype(float) < 10.00)]
+    df_c.columns = df_c.columns.str.strip().str.upper()
+    libres = df_c[
+        (df_c['ESTADO'].astype(str).str.upper() == 'LIBRE') & 
+        (df_c['TIPO_VEHICULO'].astype(str).str.upper().str.contains(tipo_b))
+    ]
+    if 'DEUDA' in libres.columns:
+        libres = libres[pd.to_numeric(libres['DEUDA'], errors='coerce').fillna(0) < 10.00]
     if libres.empty: return None, None, None, "S/P"
     mejor, menor = None, float('inf')
     for _, chofer in libres.iterrows():
