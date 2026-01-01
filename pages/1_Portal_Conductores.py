@@ -160,7 +160,19 @@ if st.session_state.usuario_activo:
         deuda_actual = float(fila_actual.iloc[0, 17])
         # [cite_start]Columna I (Índice 8) es Estado [cite: 1]
         estado_actual = str(fila_actual.iloc[0, 8]) 
-        
+        if deuda_actual >= DEUDA_MAXIMA and "LIBRE" in estado_actual.upper():
+            st.error("⚠️ DESCONEXIÓN AUTOMÁTICA: Tu deuda superó el límite permitido.")
+            enviar_datos({
+                "accion": "actualizar_estado", 
+                "nombre": user_nom, 
+                "apellido": user_ape, 
+                "estado": "OCUPADO"
+            })
+            time.sleep(1) 
+            st.rerun() 
+        # ---------------------------------------------------
+
+        st.info(f"Estado Actual: **{estado_actual}**")
         st.info(f"Estado Actual: **{estado_actual}**")
         st.metric("Tu Deuda Actual:", f"${deuda_actual:.2f}")
         st.success(f"✅ Socio: **{nombre_completo_unificado}**")
