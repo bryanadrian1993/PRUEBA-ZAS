@@ -199,7 +199,7 @@ if st.session_state.usuario_activo:
 
         # 3. DECISIÓN DEL SISTEMA
         if not viaje_activo.empty:
-            # CASO A: HAY PASAJERO -> Mostramos SOLO el botón de Finalizar
+            # CASO A: HAY PASAJERO -> Mostramos datos y el botón de Finalizar
             datos_v = viaje_activo.iloc[-1]
             st.warning("🚖 TIENES UN PASAJERO A BORDO")
             st.write(f"👤 **Cliente:** {datos_v['Nombre del cliente']}")
@@ -208,25 +208,45 @@ if st.session_state.usuario_activo:
             st.markdown(f"[🗺️ Ver Mapa]({datos_v['Mapa']})")
 
             if st.button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True):
-                with st.spinner("Calculando distancia recorrida..."):
-                    kms_finales = 1.0 
-                    if lat_actual and lon_actual:
-                        try:
-                            # Obtenemos las coordenadas de inicio guardadas en el pedido
-                            link_mapa = str(datos_v['Mapa'])
-                            lat_cliente = float(link_mapa.split('query=')[1].split(',')[0])
-                            lon_cliente = float(link_mapa.split('query=')[1].split(',')[1])
-                            
-                            # Aplicamos Haversine para distancia real
-                            dLat = math.radians(lat_actual - lat_cliente)
-                            dLon = math.radians(lon_actual - lon_cliente)
-                            a = math.sin(dLat/2)**2 + math.cos(math.radians(lat_cliente)) * \
-                                math.cos(math.radians(lat_actual)) * math.sin(dLon/2)**2
-                            kms_finales = 2 * 6371 * math.asin(math.sqrt(a))
-                            
-                            if kms_finales < 0.5: kms_finales = 1.0 
-                        except:
-                            kms_finales = 5.0 
+                with st.spinner("Calculando distancia y actualizando deuda..."):
+                    try:
+                        # 1. Obtenemos coordenadas desde el link del mapa
+                        link_mapa = str(datos_v['Mapa'])
+                        lat_cli = float(link_mapa.split('query=')[1].split(',')[0])
+                        lon_cli = float(link_mapa.split('query=')[1].split(',')[1])
+                        
+                        # 2. Fórmula Haversine para distancia real
+                        dLat = math.radians(lat_actual - lat_cli)
+                        dLon = math.radians(lon_actual - lon_cli)
+                        a = math.sin(dLat/2)**2 + math.cos(math.radians(lat_cli)) * \
+                            math.cos(math.radians(lat_actual)) * math.sin(dLon/2)**2
+                        distancia = 2 * 6371 * math.asin(math.sqrt(a))
+                        
+                        # Ajuste de seguridad para distancias mínimas
+                        if distancia < 0.5: distancia = 1.0
+                        
+                        # 3. Cálculo de Comisión ($0.25 por km)
+                        comision_nueva = round(distancia * 0.25, 2)
+                        
+                        # 4. ENVIAR TODO EN UNA SOLA ACCIÓN AL EXCEL
+                        res = enviar_datos_a_sheets({
+                            "accion": "finalizar_y_deuda",
+                            "conductor": nombre_socio,
+                            "comision": comision_nueva,
+                            "km": round(distancia, 2)
+                        })
+                        
+                        if res != "Error":
+                            st.success(f"✅ Viaje Finalizado. Comisión de ${comision_nueva} cargada.")
+                            st.balloons()
+                            # Pequeña pausa antes de refrescar
+                            import time
+                            time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error("❌ Error de conexión con el servidor.")
+                    except Exception as e:
+                        st.error(f"❌ Error al procesar coordenadas: {e}") 
 
                     # ENVIAMOS EL KM REAL AL EXCEL
                     res = enviar_datos({
