@@ -80,7 +80,7 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
     df_c, df_u = cargar_datos("CHOFERES"), cargar_datos("UBICACIONES")
     if df_c.empty or df_u.empty: return None, None, None, "S/P"
     
-    # 1. Normalizamos encabezados a MAYÚSCULAS
+    # 1. Normalizamos encabezados a MAYÚSCULAS para evitar errores
     df_c.columns = df_c.columns.str.strip().str.upper()
     tipo_b = tipo_sol.split(" ")[0].upper()
 
@@ -108,16 +108,27 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
                 d = math.sqrt((lat_cli - lat_cond)**2 + (lon_cli - lon_cond)**2)
                 if d < menor: menor, mejor = d, chofer
             except: continue
+
     if mejor is not None:
-        raw_t = str(mejor.get('Telefono', '')).split('.')[0].strip()
+        # 4. EXTRACCIÓN FINAL DE DATOS (Usando mayúsculas para evitar KeyError)
+        raw_t = str(mejor.get('TELEFONO', '')).split('.')[0].strip()
         t_limpio = re.sub(r"[^0-9+]", "", raw_t)
-        if len(t_limpio) < 5: t = "0000000000"
+        
+        # Formateo de teléfono
+        if len(t_limpio) < 5: 
+            t = "0000000000"
         else:
-            if t_limpio.startswith("+"): t = t_limpio.replace("+", "")
+            if t_limpio.startswith("+"): 
+                t = t_limpio.replace("+", "")
             else:
-                cod = {"Ecuador": "593", "Colombia": "57", "Perú": "51", "México": "52", "Argentina": "54", "Chile": "56", "España": "34", "Estados Unidos": "1"}.get(str(mejor.get('Pais', 'Ecuador')).capitalize().strip(), "593")
+                cod = "593" # Código por defecto Ecuador
                 t = cod + t_limpio[1:] if t_limpio.startswith("0") else cod + t_limpio
-        return mejor, t, str(mejor['Foto_Perfil']), str(mejor.get('Placa', 'S/P'))
+        
+        foto = str(mejor.get('FOTO_PERFIL', 'SIN_FOTO'))
+        placa = str(mejor.get('PLACA', 'S/P'))
+        
+        return mejor, t, foto, placa
+        
     return None, None, None, "S/P"
 
 # --- 📱 INTERFAZ ---
