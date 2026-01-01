@@ -22,7 +22,7 @@ if st.session_state.get('viaje_confirmado', False):
     st_autorefresh(interval=10000, key="datarefresh")
 
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
-URL_SCRIPT = "https://script.google.com/macros/s/AKfycbyv1zWhvZXe764MpX_aE-EAezKFw5o60HeoH-OY6KOuyACeW47hVDZ56otmM8hBUgfQ/exec"
+URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
 LAT_BASE, LON_BASE = -0.466657, -76.989635
 
 if 'viaje_confirmado' not in st.session_state: st.session_state.viaje_confirmado = False
