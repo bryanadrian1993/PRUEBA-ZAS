@@ -76,6 +76,13 @@ def enviar_datos(datos):
             return response.read().decode('utf-8')
     except Exception as e: return f"Error: {e}"
 
+def enviar_datos_a_sheets(datos):
+    try:
+        params = urllib.parse.urlencode(datos)
+        with urllib.request.urlopen(f"{URL_SCRIPT}?{params}") as response:
+            return response.read().decode('utf-8')
+    except: return "Error"
+
 # --- 📱 INTERFAZ ---
 st.title("🚖 Portal de Socios")
 
