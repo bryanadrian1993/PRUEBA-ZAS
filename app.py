@@ -132,6 +132,7 @@ if not st.session_state.viaje_confirmado:
         tipo_veh = st.selectbox("¿Qué necesitas?", ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔"])
         enviar = st.form_submit_button("🚖 SOLICITAR UNIDAD")
 
+    # CORRECCIÓN DE ESPACIOS AQUÍ 👇
     if enviar and nombre_cli and ref_cli:
         with st.spinner("🔄 Buscando unidad..."):
             chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
@@ -153,7 +154,7 @@ if not st.session_state.viaje_confirmado:
                     "mapa": mapa_url
                 })
                 
-                # DIAGNÓSTICO: Verifica respuesta del servidor
+                # DIAGNÓSTICO
                 st.write(f"Respuesta del servidor: {res}")
                 
                 if res != "Error":
@@ -170,6 +171,8 @@ if not st.session_state.viaje_confirmado:
                     st.rerun()
                 else:
                     st.error("❌ No se pudo conectar con el servidor de viajes.")
+            else:
+                 st.warning("⚠️ No hay conductores disponibles.")
 
 if st.session_state.viaje_confirmado:
     dp = st.session_state.datos_pedido
