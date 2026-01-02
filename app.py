@@ -138,12 +138,20 @@ if not st.session_state.viaje_confirmado:
             chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
             
             if chof is not None:
-                nombre_chof = f"{chof['NOMBRE']} {chof['APELLIDO']}" 
+                # --- CORRECCIÓN 1: Limpieza total del nombre ---
+                # Aseguramos que no haya espacios extra ni valores nulos (nan)
+                n_limpio = str(chof['NOMBRE']).strip()
+                a_limpio = str(chof['APELLIDO']).strip()
+                if a_limpio == "nan": a_limpio = "" # Si no hay apellido
+                
+                # Este es el nombre exacto que buscaremos en el Excel
+                nombre_chof = f"{n_limpio} {a_limpio}".strip().upper()
+                
                 id_v = f"TX-{random.randint(1000, 9999)}"
                 mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
                 
-                # 🚀 Registro del pedido en la hoja VIAJES
-                res = enviar_datos_a_sheets({
+                # 🚀 1. Registrar el pedido en VIAJES
+                res_pedido = enviar_datos_a_sheets({
                     "accion": "registrar_pedido",
                     "id_viaje": id_v,
                     "cliente": nombre_cli,
@@ -154,13 +162,29 @@ if not st.session_state.viaje_confirmado:
                     "mapa": mapa_url
                 })
                 
-                # DIAGNÓSTICO
-                st.write(f"Respuesta del servidor: {res}")
+                # Muestra qué respondió el registro
+                st.write(f"📝 Registro Pedido: {res_pedido}")
                 
-                if res != "Error":
-                    # Cambiamos al chofer a OCUPADO inmediatamente en la hoja CHOFERES
-                    enviar_datos_a_sheets({"accion": "cambiar_estado", "conductor": nombre_chof, "estado": "OCUPADO"})
+                if res_pedido != "Error":
+                    # 🚀 2. Cambiar estado a OCUPADO (Con diagnóstico)
+                    res_estado = enviar_datos_a_sheets({
+                        "accion": "cambiar_estado", 
+                        "conductor": nombre_chof, 
+                        "estado": "OCUPADO"
+                    })
                     
+                    # --- CORRECCIÓN 2: Verificamos si realmente se cambió ---
+                    st.write(f"🔄 Cambio Estado: {res_estado}")
+                    
+                    if "Actualizado" in res_estado:
+                        st.success("✅ ¡Estado cambiado correctamente!")
+                    else:
+                        st.warning(f"⚠️ El pedido entró, pero no pudimos cambiar el estado. Nombre enviado: [{nombre_chof}]")
+
+                    # Pausa breve para leer los mensajes antes de recargar
+                    import time
+                    time.sleep(2)
+
                     st.session_state.viaje_confirmado = True
                     st.session_state.datos_pedido = {
                         "chof": nombre_chof, "t_chof": t_chof, "foto": foto_chof, 
@@ -170,7 +194,7 @@ if not st.session_state.viaje_confirmado:
                     }
                     st.rerun()
                 else:
-                    st.error("❌ No se pudo conectar con el servidor de viajes.")
+                    st.error("❌ Error al registrar en la base de datos.")
             else:
                  st.warning("⚠️ No hay conductores disponibles.")
 
