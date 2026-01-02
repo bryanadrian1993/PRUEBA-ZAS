@@ -47,13 +47,23 @@ else:
 
 # --- 🛠️ FUNCIONES ---
 def cargar_datos(hoja):
+    # --- IDs EXTRAÍDOS DE TUS IMÁGENES ---
     GID_CHOFERES = "773119638"
     GID_VIAJES   = "0"
+    
     try:
+        # Seleccionamos el ID correcto según la hoja que pida el código
         gid_actual = GID_CHOFERES if hoja == "CHOFERES" else GID_VIAJES
+        
+        # Usamos el enlace de exportación directa (Mucho más estable)
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={gid_actual}"
+        
+        # Leemos el archivo CSV
         df = pd.read_csv(url)
+        
+        # LIMPIEZA VITAL: Quitamos espacios invisibles en los títulos
         df.columns = df.columns.str.strip()
+        
         return df
     except Exception as e:
         return pd.DataFrame()
@@ -81,153 +91,231 @@ if st.session_state.usuario_activo:
     df_fresh = cargar_datos("CHOFERES")
     user_nom = str(st.session_state.datos_usuario['Nombre']).strip()
     user_ape = str(st.session_state.datos_usuario['Apellido']).strip()
+    
+    # Creamos el nombre completo EXACTO para sincronizar con la hoja UBICACIONES
     nombre_completo_unificado = f"{user_nom} {user_ape}".upper()
     
+    # BUSCAMOS LA FILA DEL USUARIO EN EL EXCEL
     fila_actual = df_fresh[
         (df_fresh['Nombre'].astype(str).str.upper().str.strip() == user_nom.upper()) & 
         (df_fresh['Apellido'].astype(str).str.upper().str.strip() == user_ape.upper())
     ]
     
+    # --- LÓGICA DE ACTUALIZACIÓN DE UBICACIÓN ---
     st.subheader(f"Bienvenido, {nombre_completo_unificado}")
 
-    # --- FOTO DE PERFIL ---
+    # --- 📸 SECCIÓN DE FOTO DE PERFIL ---
+    # Buscamos la foto: primero en la sesión (por si acaba de cambiar) y luego en el Excel
     foto_actual = st.session_state.datos_usuario.get('Foto_Perfil', 'SIN_FOTO')
     if foto_actual == "SIN_FOTO" and not fila_actual.empty:
-        try: foto_actual = fila_actual.iloc[0]['Foto_Perfil']
+        try:
+            foto_actual = fila_actual.iloc[0]['Foto_Perfil']
         except: pass
 
     col_img, col_btn = st.columns([1, 2])
+
     with col_img:
         if foto_actual and str(foto_actual) != "nan" and len(str(foto_actual)) > 100:
             try:
                 img_bytes = base64.b64decode(foto_actual)
                 st.image(io.BytesIO(img_bytes), width=150)
-            except: st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=120)
-        else: st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=120)
+            except:
+                st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=120)
+        else:
+            st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=120)
 
     with col_btn:
-        st.write("📷 **¿Cambiar foto?**")
-        archivo_nuevo = st.file_uploader("Sube imagen (150x150)", type=["jpg", "png"], key="p_foto")
-        if archivo_nuevo and st.button("💾 GUARDAR FOTO"):
-            with st.spinner("Guardando..."):
-                img = Image.open(archivo_nuevo).convert("RGB").resize((150, 150))
-                buffered = io.BytesIO()
-                img.save(buffered, format="JPEG", quality=60)
-                foto_b64 = base64.b64encode(buffered.getvalue()).decode()
-                res = enviar_datos({"accion": "actualizar_foto_perfil", "email": fila_actual.iloc[0]['Email'], "foto": foto_b64})
-                if res:
-                    st.session_state.datos_usuario['Foto_Perfil'] = foto_b64
-                    st.success("✅ Foto guardada")
-                    time.sleep(1)
-                    st.rerun()
-
-    st.write("---")
+        st.write("📷 **¿Deseas cambiar tu foto?**")
+        archivo_nuevo = st.file_uploader("Sube una imagen (150x150)", type=["jpg", "png", "jpeg"], key="panel_ch_foto")
+        
+        if archivo_nuevo:
+            if st.button("💾 GUARDAR NUEVA FOTO"):
+                with st.spinner("Optimizando..."):
+                    img = Image.open(archivo_nuevo).convert("RGB")
+                    img = img.resize((150, 150)) 
+                    buffered = io.BytesIO()
+                    img.save(buffered, format="JPEG", quality=60) 
+                    foto_b64 = base64.b64encode(buffered.getvalue()).decode()
+                    
+                    res = enviar_datos({
+                        "accion": "actualizar_foto_perfil",
+                        "email": fila_actual.iloc[0]['Email'],
+                        "foto": foto_b64
+                    })
+                    
+                    if res:
+                        st.success("✅ ¡Foto guardada!")
+                        # Actualizamos la foto en la memoria de la App de inmediato
+                        st.session_state.datos_usuario['Foto_Perfil'] = foto_b64
+                        time.sleep(1) 
+                        st.rerun()
+    st.write("---") # Separador visual antes del GPS
+    # Añadimos 'value=True' para que intente conectar apenas entre
     if st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True):
+        # Usamos las variables lat_actual y lon_actual que definiste en la línea 29
         if lat_actual and lon_actual:
-            res = enviar_datos({"accion": "actualizar_ubicacion", "conductor": nombre_completo_unificado, "latitud": lat_actual, "longitud": lon_actual})
-            if res: st.success(f"📍 Ubicación activa: {lat_actual}, {lon_actual}")
-        else: st.warning("Esperando señal GPS...")
-
+            res = enviar_datos({
+                "accion": "actualizar_ubicacion",
+                "conductor": nombre_completo_unificado,
+                "latitud": lat_actual,
+                "longitud": lon_actual
+            })
+            if res:
+                st.success(f"📍 Ubicación activa: {lat_actual}, {lon_actual}")
+        else:
+            # Esto se quita cuando das clic en 'Hecho' en el navegador
+            st.warning("🛰️ Esperando señal de GPS... Por favor, permite el acceso en tu navegador.")
+    
     # --- MOSTRAR INFORMACIÓN DEL SOCIO ---
     if not fila_actual.empty:
+        # Columna R (Índice 17) es DEUDA
         deuda_actual = float(fila_actual.iloc[0, 17])
-        estado_actual = str(fila_actual.iloc[0, 8])
+        # Columna I (Índice 8) es Estado
+        estado_actual = str(fila_actual.iloc[0, 8]) 
         
-        # Bloqueo Automático
+        # ⚠️ CORRECCIÓN: Quitamos el 'st.rerun()' inmediato del bloqueo para permitir que cargue la interfaz de abajo
         if deuda_actual >= DEUDA_MAXIMA and "LIBRE" in estado_actual.upper():
             st.error("⚠️ DESCONEXIÓN AUTOMÁTICA: Tu deuda superó el límite permitido.")
-            enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "OCUPADO"})
-            time.sleep(1)
-            st.rerun()
-
-        # -------------------------------------------------------------
-        # ✅ AQUI ESTÁ LA SECCIÓN DE PAGOS (Antes no estaba)
-        # -------------------------------------------------------------
+            enviar_datos({
+                "accion": "actualizar_estado", 
+                "nombre": user_nom, 
+                "apellido": user_ape, 
+                "estado": "OCUPADO"
+            })
+            # time.sleep(1)  <-- Comentado para que no detenga la carga
+            # st.rerun()     <-- Comentado para que permita leer el código de pagos de abajo
         
-        # 1. Métricas visuales
+        # ---------------------------------------------------
+        # 💰 SECCIÓN DE PAGOS UNIFICADA (Aquí está la corrección)
+        # ---------------------------------------------------
+        
+        # 1. INDICADORES VISUALES (Siempre visibles)
         col_m1, col_m2 = st.columns(2)
         col_m1.metric("💸 Deuda Actual", f"${deuda_actual:.2f}")
         col_m2.metric("🚦 Estado Actual", estado_actual)
 
-        # 2. SECCIÓN DE PAGOS (Solo aparece si la deuda es mayor a 0)
+        # 2. SECCIÓN DE PAGOS (Solo aparece si debe dinero)
         if deuda_actual > 0:
             st.markdown("---")
             st.subheader("💳 Centro de Pagos")
             st.warning(f"Saldo pendiente: **${deuda_actual:.2f}**")
             
+            # Pestañas de Pago
             tab_deuna, tab_paypal = st.tabs(["📲 Pagar con DEUNA", "🌎 Pagar con PAYPAL"])
             
             with tab_deuna:
                 st.write("**Escanea el QR:**")
-                try: 
-                    # Intenta cargar qr_deuna.png
+                try:
+                    # Asegúrate de que este archivo 'qr_deuna.png' exista en tu GitHub
                     st.image("qr_deuna.png", caption="QR Banco Pichincha", width=250)
-                except: 
-                    st.error("⚠️ Sube 'qr_deuna.png' a GitHub")
+                except:
+                    st.error("⚠️ No se encontró 'qr_deuna.png' en GitHub")
                 st.info("Envía el comprobante al admin.")
 
             with tab_paypal:
                 st.write("**Pagar con saldo/tarjeta:**")
-                st.markdown(f'''<a href="{LINK_PAYPAL}" target="_blank" style="text-decoration:none;"><div style="background-color:#0070ba;color:white;padding:12px;text-align:center;border-radius:10px;font-weight:bold;">🔵 IR A PAYPAL</div></a>''', unsafe_allow_html=True)
-            st.divider()
-        # -------------------------------------------------------------
+                st.markdown(f'''
+                    <a href="{LINK_PAYPAL}" target="_blank" style="text-decoration:none;">
+                        <div style="background-color:#0070ba;color:white;padding:12px;text-align:center;border-radius:10px;font-weight:bold;">
+                            🔵 IR A PAYPAL
+                        </div>
+                    </a>
+                ''', unsafe_allow_html=True)
+                st.caption("Nota: PayPal podría aplicar comisiones adicionales.")
+        
+        st.divider()
+        # ---------------------------------------------------
 
-        # --- GESTIÓN DE VIAJE ---
+        # ==========================================
+        # 🚀 BLOQUE INTELIGENTE: GESTIÓN DE VIAJE
+        # ==========================================
         st.subheader("Gestión de Viaje")
+        
+        # 1. Consultamos la hoja VIAJES
         df_viajes = cargar_datos("VIAJES")
-        viaje_activo = pd.DataFrame()
+        viaje_activo = pd.DataFrame() 
+
+        # 2. Filtramos: ¿Existe un viaje "EN CURSO" para este conductor?
+        # Corregido: Buscamos en la columna 'Conductor' (no 'Conductor Asignado')
         if not df_viajes.empty and 'Conductor' in df_viajes.columns:
             viaje_activo = df_viajes[
                 (df_viajes['Conductor'].astype(str).str.upper() == nombre_completo_unificado) & 
                 (df_viajes['Estado'].astype(str) == "EN CURSO")
             ]
 
+        # 3. DECISIÓN DEL SISTEMA
+        # CORRECCIÓN: Agregamos 'and "OCUPADO" in estado_actual' para borrar el botón apenas cobres
         if not viaje_activo.empty and "OCUPADO" in estado_actual:
+            
+            # CASO A: HAY PASAJERO -> Mostramos datos y el botón de Finalizar
             datos_v = viaje_activo.iloc[-1]
             st.warning("🚖 TIENES UN PASAJERO A BORDO")
+            
             st.write(f"👤 **Cliente:** {datos_v.get('Cliente', 'S/D')}")
             st.write(f"📞 **Tel:** {datos_v.get('Tel Cliente', 'S/D')}")
             st.write(f"📍 **Destino:** {datos_v.get('Referencia', 'S/D')}")
             st.markdown(f"[🗺️ Ver Mapa]({datos_v.get('Mapa', '#')})")
 
             if st.button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True):
-                with st.spinner("Procesando..."):
+                with st.spinner("Calculando distancia y actualizando deuda..."):
                     try:
+                        # 1. Obtenemos coordenadas desde el link del mapa
                         link_mapa = str(datos_v.get('Mapa', ''))
-                        distancia = 2.0 
+                        distancia = 2.0 # Valor por defecto
+
+                        # Intentamos parsear el link del mapa si tiene el formato esperado
                         if '0' in link_mapa and ',' in link_mapa:
                             try:
                                 lat_cli = float(link_mapa.split('0')[1].split(',')[0])
                                 lon_cli = float(link_mapa.split('0')[1].split(',')[1])
+                                
+                                # Fórmula Haversine para distancia real
                                 dLat = math.radians(lat_actual - lat_cli)
                                 dLon = math.radians(lon_actual - lon_cli)
-                                a = math.sin(dLat/2)**2 + math.cos(math.radians(lat_cli)) * math.cos(math.radians(lat_actual)) * math.sin(dLon/2)**2
+                                a = math.sin(dLat/2)**2 + math.cos(math.radians(lat_cli)) * \
+                                    math.cos(math.radians(lat_actual)) * math.sin(dLon/2)**2
                                 c = 2 * math.asin(math.sqrt(a))
-                                distancia = 6371 * c
-                            except: pass
-                        if distancia < 1.0: distancia = 1.0
-                        comision = round(distancia * TARIFA_POR_KM, 2)
+                                distancia = 6371 * c # KM en linea recta
+                            except:
+                                pass # Si falla el cálculo GPS, usamos el defecto
                         
+                        # Ajuste de seguridad: Mínimo 1 km
+                        if distancia < 1.0: distancia = 1.0
+                        
+                        # 2. Cálculo de Comisión
+                        comision_nueva = round(distancia * TARIFA_POR_KM, 2)
+                        
+                        # 3. ENVIAR AL SCRIPT
                         res = enviar_datos_a_sheets({
                             "accion": "finalizar_y_deuda",
                             "conductor": nombre_completo_unificado,
-                            "comision": comision,
+                            "comision": comision_nueva,
                             "km": round(distancia, 2)
                         })
+                        
                         if res == "Ok":
+                            st.success(f"✅ Viaje Finalizado. Comisión de ${comision_nueva} cargada.")
                             st.balloons()
-                            st.success(f"✅ Finalizado. Comisión: ${comision}")
                             time.sleep(2)
                             st.rerun()
-                        else: st.error("Error de conexión.")
-                    except Exception as e: st.error(f"Error: {e}")
+                        else:
+                            st.error("❌ Error de conexión con el servidor.")
+                    except Exception as e:
+                        st.error(f"❌ Error técnico: {e}") 
 
         else:
+            # CASO B: NO HAY PASAJERO -> Verificamos deuda antes de permitir trabajar
             if deuda_actual >= 10.00:
-                st.error(f"🚫 CUENTA BLOQUEADA POR DEUDA (${deuda_actual:.2f})")
-                st.info("⬆️ Usa las opciones de arriba para pagar y desbloquearte.")
-                st.button("🟢 PONERME LIBRE", disabled=True)
+                st.error(f"🚫 CUENTA BLOQUEADA: Tu deuda (${deuda_actual:.2f}) supera el límite de $10.00")
+                st.info("Para volver a recibir viajes, por favor cancela tu saldo pendiente usando la sección de pagos arriba.")
+                
+                # Botón deshabilitado para evitar que el chofer se ponga LIBRE
+                st.button("🟢 PONERME LIBRE", disabled=True, help="Debes pagar tu deuda para activar este botón")
             else:
+                # Si la deuda es menor a $10, permitimos cambiar estado normalmente
+                if "OCUPADO" in estado_actual:
+                    st.info("Estás en estado OCUPADO (Sin pasajero de App).")
+
                 col_lib, col_ocu = st.columns(2)
                 with col_lib:
                     if st.button("🟢 PONERME LIBRE", use_container_width=True):
@@ -237,35 +325,78 @@ if st.session_state.usuario_activo:
                     if st.button("🔴 PONERME OCUPADO", use_container_width=True):
                         enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "OCUPADO"})
                         st.rerun()
-
-    with st.expander("📜 Ver Historial"):
-        if 'df_viajes' not in locals(): df_viajes = cargar_datos("VIAJES")
+        
+        st.divider()
+    with st.expander("📜 Ver Mi Historial de Viajes"):
+        # Seguridad: Si el bloque anterior no cargó los datos, los cargamos aquí
+        if 'df_viajes' not in locals():
+            df_viajes = cargar_datos("VIAJES")
+            
         if not df_viajes.empty and 'Conductor Asignado' in df_viajes.columns:
+            # Filtramos los viajes de este conductor específico
             mis_viajes = df_viajes[df_viajes['Conductor Asignado'].astype(str).str.upper() == nombre_completo_unificado]
-            st.dataframe(mis_viajes[['Fecha', 'Referencia', 'Estado']], use_container_width=True)
-
+            
+            if not mis_viajes.empty:
+                cols_mostrar = ['Fecha', 'Nombre del cliente', 'Referencia', 'Estado']
+                cols_finales = [c for c in cols_mostrar if c in mis_viajes.columns]
+                st.dataframe(mis_viajes[cols_finales].sort_values(by='Fecha', ascending=False), use_container_width=True)
+            else:
+                st.info("Aún no tienes historial de viajes.")
+        else:
+            st.write("Cargando datos...")    
+    
     if st.button("🔒 CERRAR SESIÓN"):
         st.session_state.usuario_activo = False
         st.rerun()
     st.stop()
-
 else:
-    # --- LOGIN ---
+    # --- PANTALLA INICIAL: LOGIN Y REGISTRO ---
     tab_log, tab_reg = st.tabs(["🔐 INGRESAR", "📝 REGISTRARME"])
+    
     with tab_log:
         st.subheader("Acceso Socios")
         l_nom = st.text_input("Nombre registrado")
         l_ape = st.text_input("Apellido registrado")
         l_pass = st.text_input("Contraseña", type="password")
+        
         if st.button("ENTRAR AL PANEL", type="primary"):
             df = cargar_datos("CHOFERES")
-            match = df[(df['Nombre'].astype(str).str.upper() == l_nom.upper()) & (df['Apellido'].astype(str).str.upper() == l_ape.upper()) & (df['Clave'].astype(str) == l_pass)]
+            # Validación por Nombre, Apellido y Clave
+            match = df[(df['Nombre'].astype(str).str.upper() == l_nom.upper()) & 
+                       (df['Apellido'].astype(str).str.upper() == l_ape.upper()) & 
+                       (df['Clave'].astype(str) == l_pass)]
+            
             if not match.empty:
                 st.session_state.usuario_activo = True
                 st.session_state.datos_usuario = match.iloc[0].to_dict()
                 st.rerun()
-            else: st.error("❌ Datos incorrectos.")
-
+            else:
+                st.error("❌ Datos incorrectos o usuario no encontrado.")
+    st.markdown("---") 
+    with st.expander("¿Olvidaste tu contraseña?"):
+        st.info("Ingresa tu correo registrado para recibir tu clave:")
+        email_recup = st.text_input("Tu Email", key="email_recup")
+        
+        if st.button("📧 Recuperar Clave"):
+            if "@" in email_recup:
+                with st.spinner("Conectando con el sistema..."):
+                    try:
+                        # Petición al Script de Google
+                        resp = requests.post(URL_SCRIPT, params={
+                            "accion": "recuperar_clave",
+                            "email": email_recup
+                        })
+                        
+                        if "CORREO_ENVIADO" in resp.text:
+                            st.success("✅ ¡Enviado! Revisa tu correo (Bandeja de entrada o Spam).")
+                        elif "EMAIL_NO_ENCONTRADO" in resp.text:
+                            st.error("❌ Ese correo no está registrado como socio.")
+                        else:
+                            st.error("Error de conexión.")
+                    except:
+                        st.error("Error al conectar con el servidor.")
+            else:
+                st.warning("Escribe un correo válido.")
     with tab_reg:
         with st.form("registro_form"):
             st.subheader("Registro de Nuevos Socios")
@@ -277,42 +408,72 @@ else:
                 r_pais = st.selectbox("País *", PAISES)
             with col2:
                 r_ape = st.text_input("Apellidos *")
-                r_telf = st.text_input("WhatsApp *")
-                r_veh = st.selectbox("Vehículo *", VEHICULOS)
+                r_telf = st.text_input("WhatsApp (Sin código) *")
+                r_veh = st.selectbox("Tipo de Vehículo *", VEHICULOS)
                 r_idioma = st.selectbox("Idioma", IDIOMAS)
+    
             r_dir = st.text_input("Dirección *")
             r_pla = st.text_input("Placa *")
             r_pass1 = st.text_input("Contraseña *", type="password")
+            
+            # --- 📸 1. NUEVO: CAMPO PARA SUBIR FOTO ---
             st.write("---")
-            st.write("📷 **Foto de Perfil**")
+            st.write("📷 **Foto de Perfil** (Opcional)")
             archivo_foto_reg = st.file_uploader("Sube tu foto", type=["jpg", "png", "jpeg"])
+            # ------------------------------------------
             
             if st.form_submit_button("✅ COMPLETAR REGISTRO"):
                 if r_nom and r_email and r_pass1:
-                    foto_b64 = "SIN_FOTO"
-                    if archivo_foto_reg:
-                        try:
-                            img = Image.open(archivo_foto_reg).resize((150, 150))
-                            buf = io.BytesIO()
-                            img.save(buf, format="JPEG")
-                            foto_b64 = base64.b64encode(buf.getvalue()).decode()
-                        except: pass
-                    res = enviar_datos({"accion": "registrar_conductor", "nombre": r_nom, "apellido": r_ape, "cedula": r_ced, "email": r_email, "direccion": r_dir, "telefono": r_telf, "placa": r_pla, "clave": r_pass1, "foto": foto_b64, "pais": r_pais, "idioma": r_idioma, "Tipo_Vehiculo": r_veh})
-                    if res: st.success("¡Registro exitoso! Ingresa arriba.")
-                else: st.warning("Completa los campos obligatorios (*)")
+                    
+                    # --- ⚙️ 2. NUEVO: PROCESAR FOTO A BASE64 ---
+                    foto_para_guardar = "SIN_FOTO" # Valor por defecto
     
-    st.markdown("---")
-    with st.expander("¿Olvidaste tu contraseña?"):
-        email_recup = st.text_input("Tu Email", key="email_recup")
-        if st.button("📧 Recuperar Clave"):
-            requests.post(URL_SCRIPT, params={"accion": "recuperar_clave", "email": email_recup})
-            st.success("Si el correo existe, recibirás tu clave pronto.")
+                    if archivo_foto_reg is not None:
+                        try:
+                            img = Image.open(archivo_foto_reg)
+                            img = img.resize((150, 150)) # Reducir tamaño
+                            buffered = io.BytesIO()
+                            img.save(buffered, format="JPEG", quality=70)
+                            foto_para_guardar = base64.b64encode(buffered.getvalue()).decode()
+                        except Exception as e:
+                            st.error(f"Error procesando la imagen: {e}")
+                    # ---------------------------------------------
+    
+                    # --- 📤 3. AGREGAMOS LA FOTO AL ENVÍO ---
+                    res = enviar_datos({
+                        "accion": "registrar_conductor", 
+                        "nombre": r_nom, 
+                        "apellido": r_ape, 
+                        "cedula": r_ced, 
+                        "email": r_email, 
+                        "direccion": r_dir, 
+                        "telefono": r_telf, 
+                        "placa": r_pla, 
+                        "clave": r_pass1, 
+                        "foto": foto_para_guardar,  # <--- AQUÍ VA LA FOTO NUEVA
+                        "pais": r_pais, 
+                        "idioma": r_idioma, 
+                        "Tipo_Vehiculo": r_veh
+                    })
+                    
+                    # Mensaje de éxito o error según responda tu función
+                    if res: 
+                        st.success("¡Registro exitoso! Ya puedes ingresar desde la pestaña superior.")
+                else:
+                    st.warning("Por favor, completa los campos obligatorios (*)")
 
 st.markdown('<div style="text-align:center; color:#888; font-size:12px; margin-top:50px;">© 2025 Taxi Seguro Global</div>', unsafe_allow_html=True)
+# 👇 PEGA ESTO AL FINAL DEL ARCHIVO (Línea 260 en adelante) 👇
 
 import time
+
+# El Radar: Solo se activa si hay un usuario logueado y está LIBRE
 if st.session_state.get('usuario_activo', False):
+    # Buscamos el estado dentro de los datos guardados en sesión
     datos = st.session_state.get('datos_usuario', {})
-    if "LIBRE" in str(datos.get('estado', 'OCUPADO')):
-        time.sleep(15)
-        st.rerun()
+    estado_chofer = datos.get('estado', 'OCUPADO') # Por seguridad asumimos ocupado si falla
+    
+    # Si está LIBRE, activamos el conteo regresivo
+    if "LIBRE" in str(estado_chofer):
+        time.sleep(15)  # Espera 15 segundos
+        st.rerun()      # Recarga la página para buscar viajes nuevos
