@@ -182,7 +182,7 @@ if st.session_state.usuario_activo:
         col_m2.metric("🚦 Estado Actual", estado_actual)
 
         # ==========================================
-        # 🚀 BLOQUE INTELIGENTE: GESTIÓN DE VIAJE (PAQUETE 2)
+        # 🚀 BLOQUE INTELIGENTE: GESTIÓN DE VIAJE
         # ==========================================
         st.subheader("Gestión de Viaje")
         
@@ -191,10 +191,11 @@ if st.session_state.usuario_activo:
         viaje_activo = pd.DataFrame() 
 
         # 2. Filtramos: ¿Existe un viaje "EN CURSO" para este conductor?
-        if not df_viajes.empty and 'Conductor Asignado' in df_viajes.columns:
+        # Corregido: Buscamos en la columna 'Conductor' (no 'Conductor Asignado')
+        if not df_viajes.empty and 'Conductor' in df_viajes.columns:
             viaje_activo = df_viajes[
-                (df_viajes['Conductor Asignado'].astype(str).str.upper() == nombre_completo_unificado) & 
-                (df_viajes['Estado'].astype(str).str.contains("EN CURSO"))
+                (df_viajes['Conductor'].astype(str).str.upper() == nombre_completo_unificado) & 
+                (df_viajes['Estado'].astype(str) == "EN CURSO")
             ]
 
         # 3. DECISIÓN DEL SISTEMA
@@ -202,62 +203,61 @@ if st.session_state.usuario_activo:
             # CASO A: HAY PASAJERO -> Mostramos datos y el botón de Finalizar
             datos_v = viaje_activo.iloc[-1]
             st.warning("🚖 TIENES UN PASAJERO A BORDO")
-            st.write(f"👤 **Cliente:** {datos_v['Nombre del cliente']}")
-            st.write(f"📞 **Tel:** {datos_v['Telefono']}")
-            st.write(f"📍 **Destino:** {datos_v['Referencia']}")
-            st.markdown(f"[🗺️ Ver Mapa]({datos_v['Mapa']})")
+            
+            # Corregido: Usamos .get() y los nombres reales de las columnas del Script
+            st.write(f"👤 **Cliente:** {datos_v.get('Cliente', 'S/D')}")
+            st.write(f"📞 **Tel:** {datos_v.get('Tel Cliente', 'S/D')}")
+            st.write(f"📍 **Destino:** {datos_v.get('Referencia', 'S/D')}")
+            st.markdown(f"[🗺️ Ver Mapa]({datos_v.get('Mapa', '#')})")
 
             if st.button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True):
                 with st.spinner("Calculando distancia y actualizando deuda..."):
                     try:
                         # 1. Obtenemos coordenadas desde el link del mapa
-                        link_mapa = str(datos_v['Mapa'])
-                        lat_cli = float(link_mapa.split('query=')[1].split(',')[0])
-                        lon_cli = float(link_mapa.split('query=')[1].split(',')[1])
+                        link_mapa = str(datos_v.get('Mapa', ''))
+                        distancia = 2.0 # Valor por defecto
+
+                        # Intentamos parsear el link del mapa si tiene el formato esperado
+                        if '0' in link_mapa and ',' in link_mapa:
+                            try:
+                                lat_cli = float(link_mapa.split('0')[1].split(',')[0])
+                                lon_cli = float(link_mapa.split('0')[1].split(',')[1])
+                                
+                                # Fórmula Haversine para distancia real
+                                dLat = math.radians(lat_actual - lat_cli)
+                                dLon = math.radians(lon_actual - lon_cli)
+                                a = math.sin(dLat/2)**2 + math.cos(math.radians(lat_cli)) * \
+                                    math.cos(math.radians(lat_actual)) * math.sin(dLon/2)**2
+                                c = 2 * math.asin(math.sqrt(a))
+                                distancia = 6371 * c # KM en linea recta
+                            except:
+                                pass # Si falla el cálculo GPS, usamos el defecto
                         
-                        # 2. Fórmula Haversine para distancia real
-                        dLat = math.radians(lat_actual - lat_cli)
-                        dLon = math.radians(lon_actual - lon_cli)
-                        a = math.sin(dLat/2)**2 + math.cos(math.radians(lat_cli)) * \
-                            math.cos(math.radians(lat_actual)) * math.sin(dLon/2)**2
-                        distancia = 2 * 6371 * math.asin(math.sqrt(a))
+                        # Ajuste de seguridad: Mínimo 1 km
+                        if distancia < 1.0: distancia = 1.0
                         
-                        # Ajuste de seguridad para distancias mínimas
-                        if distancia < 0.5: distancia = 1.0
+                        # 2. Cálculo de Comisión ($0.05 por km según tu config)
+                        comision_nueva = round(distancia * TARIFA_POR_KM, 2)
                         
-                        # 3. Cálculo de Comisión ($0.25 por km)
-                        comision_nueva = round(distancia * 0.25, 2)
-                        
-                        # 4. ENVIAR TODO EN UNA SOLA ACCIÓN AL EXCEL
+                        # 3. ENVIAR AL SCRIPT (Corregido: variable nombre_completo_unificado)
                         res = enviar_datos_a_sheets({
                             "accion": "finalizar_y_deuda",
-                            "conductor": nombre_socio,
+                            "conductor": nombre_completo_unificado,
                             "comision": comision_nueva,
                             "km": round(distancia, 2)
                         })
                         
-                        if res != "Error":
+                        if res == "Ok":
                             st.success(f"✅ Viaje Finalizado. Comisión de ${comision_nueva} cargada.")
                             st.balloons()
-                            # Pequeña pausa antes de refrescar
-                            import time
                             time.sleep(2)
                             st.rerun()
                         else:
                             st.error("❌ Error de conexión con el servidor.")
                     except Exception as e:
-                        st.error(f"❌ Error al procesar coordenadas: {e}") 
+                        st.error(f"❌ Error técnico: {e}") 
 
-                    # ENVIAMOS EL KM REAL AL EXCEL
-                    res = enviar_datos({
-                        "accion": "terminar_viaje", 
-                        "conductor": nombre_completo_unificado,
-                        "km": round(kms_finales, 2)
-                    })
-                    
-                    if res:
-                        st.success(f"✅ Viaje finalizado: {kms_finales:.2f} km.")
-                        time.sleep(2)
+        else:
                         st.rerun()
 
         else:
