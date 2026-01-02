@@ -173,7 +173,7 @@ if st.session_state.usuario_activo:
         # Columna I (Índice 8) es Estado
         estado_actual = str(fila_actual.iloc[0, 8]) 
         
-        # ⚠️ CORRECCIÓN: Quitamos el 'st.rerun()' inmediato del bloqueo para permitir que cargue la interfaz de abajo
+        # Bloqueo Automático (Sin rerun inmediato para permitir ver pagos)
         if deuda_actual >= DEUDA_MAXIMA and "LIBRE" in estado_actual.upper():
             st.error("⚠️ DESCONEXIÓN AUTOMÁTICA: Tu deuda superó el límite permitido.")
             enviar_datos({
@@ -182,14 +182,13 @@ if st.session_state.usuario_activo:
                 "apellido": user_ape, 
                 "estado": "OCUPADO"
             })
-            # time.sleep(1)  <-- Comentado para que no detenga la carga
-            # st.rerun()     <-- Comentado para que permita leer el código de pagos de abajo
+            # No hacemos st.rerun() aquí para que cargue la interfaz de abajo
         
         # ---------------------------------------------------
-        # 💰 SECCIÓN DE PAGOS UNIFICADA (Aquí está la corrección)
+        # 💰 SECCIÓN DE PAGOS UNIFICADA (Aquí está lo nuevo)
         # ---------------------------------------------------
         
-        # 1. INDICADORES VISUALES (Siempre visibles)
+        # 1. INDICADORES VISUALES
         col_m1, col_m2 = st.columns(2)
         col_m1.metric("💸 Deuda Actual", f"${deuda_actual:.2f}")
         col_m2.metric("🚦 Estado Actual", estado_actual)
@@ -206,11 +205,24 @@ if st.session_state.usuario_activo:
             with tab_deuna:
                 st.write("**Escanea el QR:**")
                 try:
-                    # Asegúrate de que este archivo 'qr_deuna.png' exista en tu GitHub
+                    # Asegúrate de que 'qr_deuna.png' exista en tu GitHub
                     st.image("qr_deuna.png", caption="QR Banco Pichincha", width=250)
                 except:
                     st.error("⚠️ No se encontró 'qr_deuna.png' en GitHub")
-                st.info("Envía el comprobante al admin.")
+                
+                # --- BOTÓN DE WHATSAPP INTEGRADO ---
+                msg_wa = f"Hola, soy {nombre_completo_unificado}. Adjunto mi comprobante de pago DEUNA para actualizar mi saldo."
+                msg_encoded = urllib.parse.quote(msg_wa)
+                # Tu número de WhatsApp (593 es el código de Ecuador)
+                numero_whatsapp = "593960643638" 
+                
+                st.markdown(f'''
+                    <a href="https://wa.me/{numero_whatsapp}?text={msg_encoded}" target="_blank" style="text-decoration:none;">
+                        <div style="background-color:#25D366;color:white;padding:12px;text-align:center;border-radius:10px;font-weight:bold;margin-top:10px;">
+                            📲 ENVIAR COMPROBANTE AL WHATSAPP
+                        </div>
+                    </a>
+                ''', unsafe_allow_html=True)
 
             with tab_paypal:
                 st.write("**Pagar con saldo/tarjeta:**")
@@ -236,7 +248,6 @@ if st.session_state.usuario_activo:
         viaje_activo = pd.DataFrame() 
 
         # 2. Filtramos: ¿Existe un viaje "EN CURSO" para este conductor?
-        # Corregido: Buscamos en la columna 'Conductor' (no 'Conductor Asignado')
         if not df_viajes.empty and 'Conductor' in df_viajes.columns:
             viaje_activo = df_viajes[
                 (df_viajes['Conductor'].astype(str).str.upper() == nombre_completo_unificado) & 
@@ -244,7 +255,6 @@ if st.session_state.usuario_activo:
             ]
 
         # 3. DECISIÓN DEL SISTEMA
-        # CORRECCIÓN: Agregamos 'and "OCUPADO" in estado_actual' para borrar el botón apenas cobres
         if not viaje_activo.empty and "OCUPADO" in estado_actual:
             
             # CASO A: HAY PASAJERO -> Mostramos datos y el botón de Finalizar
@@ -326,9 +336,7 @@ if st.session_state.usuario_activo:
                         enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "OCUPADO"})
                         st.rerun()
         
-        st.divider()
     with st.expander("📜 Ver Mi Historial de Viajes"):
-        # Seguridad: Si el bloque anterior no cargó los datos, los cargamos aquí
         if 'df_viajes' not in locals():
             df_viajes = cargar_datos("VIAJES")
             
