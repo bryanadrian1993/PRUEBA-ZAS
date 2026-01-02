@@ -186,11 +186,34 @@ if st.session_state.usuario_activo:
 
         st.info(f"Estado Actual: **{estado_actual}**")
         st.metric("Tu Deuda Actual:", f"${deuda_actual:.2f}")
-        st.success(f"✅ Socio: **{nombre_completo_unificado}**")
-        
-        col_m1, col_m2 = st.columns(2)
-        col_m1.metric("💸 Deuda Actual", f"${deuda_actual:.2f}")
-        col_m2.metric("🚦 Estado Actual", estado_actual)
+        # --- 💰 SECCIÓN DE PAGOS UNIFICADA ---
+        if deuda_actual > 0:
+            st.markdown("---")
+            st.subheader("💳 Centro de Pagos")
+            st.write(f"Tu saldo pendiente es de: **${deuda_actual:.2f}**")
+            
+            # Usamos pestañas para que el conductor elija su método preferido
+            tab_deuna, tab_paypal = st.tabs(["📲 Pagar con DEUNA", "🌎 Pagar con PAYPAL"])
+            
+            with tab_deuna:
+                st.write("Escanea el QR desde tu App Deuna o Banco Pichincha:")
+                try:
+                    # Cargamos la imagen qr_deuna.png de tu repositorio
+                    st.image("qr_deuna.png", caption="QR Oficial de Recaudación", width=280)
+                except:
+                    st.error("Error: No se encontró el archivo 'qr_deuna.png' en el repositorio.")
+                st.info("💡 Envía el comprobante al administrador para liberar tu cupo.")
+
+            with tab_paypal:
+                st.write("Haz clic en el botón para pagar de forma segura con tarjeta o saldo PayPal:")
+                st.markdown(f'''
+                    <a href="{LINK_PAYPAL}" target="_blank" style="text-decoration:none;">
+                        <div style="background-color:#0070ba;color:white;padding:15px;text-align:center;border-radius:10px;font-weight:bold;font-size:18px;">
+                            🔵 IR A PAGAR CON PAYPAL
+                        </div>
+                    </a>
+                ''', unsafe_allow_html=True)
+                st.caption("Nota: PayPal podría aplicar comisiones adicionales por transacción.")
 
         # ==========================================
         # 🚀 BLOQUE INTELIGENTE: GESTIÓN DE VIAJE
