@@ -7,12 +7,10 @@ import urllib.request
 import json
 import random
 import math
-import re
 import pydeck as pdk
 from streamlit_autorefresh import st_autorefresh
 import io
 import base64
-from PIL import Image
 
 # --- ⚙️ CONFIGURACIÓN DEL SISTEMA ---
 st.set_page_config(page_title="TAXI SEGURO", page_icon="🚖", layout="centered")
@@ -22,6 +20,7 @@ if st.session_state.get('viaje_confirmado', False):
     st_autorefresh(interval=10000, key="datarefresh")
 
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
+# 👇 ¡PEGA AQUÍ TU URL NUEVA (SOLO HASTA /exec)! 👇
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
 LAT_BASE, LON_BASE = -0.466657, -76.989635
 
@@ -33,11 +32,9 @@ st.markdown("""
     <style>
     .main-title { font-size: 40px; font-weight: bold; text-align: center; color: #000; margin-bottom: 0; }
     .sub-title { font-size: 25px; font-weight: bold; text-align: center; color: #E91E63; margin-top: -10px; margin-bottom: 20px; }
-    .step-header { font-size: 18px; font-weight: bold; margin-top: 20px; margin-bottom: 10px; color: #333; }
-    .stButton>button { width: 100%; height: 50px; font-weight: bold; font-size: 18px; border-radius: 10px; }
     .id-badge { background-color: #F0F2F6; padding: 5px 15px; border-radius: 20px; border: 1px solid #CCC; font-weight: bold; color: #555; display: inline-block; margin-bottom: 10px; }
     .eta-box { background-color: #FFF3E0; padding: 15px; border-radius: 10px; border-left: 5px solid #FF9800; text-align: center; margin-bottom: 15px; font-weight: bold; }
-    .footer { text-align: center; color: #888; font-size: 14px; margin-top: 50px; border-top: 1px solid #eee; padding-top: 20px; }
+    .stButton>button { width: 100%; height: 50px; font-weight: bold; font-size: 18px; border-radius: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -51,7 +48,6 @@ def calcular_distancia_real(lat1, lon1, lat2, lon2):
     return 2 * math.atan2(math.sqrt(a), math.sqrt(1-a)) * R
 
 def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
-    """Consulta OSRM para trazar el camino por las calles."""
     try:
         url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
         with urllib.request.urlopen(url, timeout=4) as response:
@@ -65,7 +61,7 @@ def cargar_datos(hoja):
         cb = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cb}"
         df = pd.read_csv(url)
-        df.columns = df.columns.str.strip()
+        df.columns = df.columns.str.strip().str.upper() # Normalizado a Mayúsculas
         return df
     except: return pd.DataFrame()
 
@@ -77,40 +73,45 @@ def enviar_datos_a_sheets(datos):
     except: return "Error"
 
 def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
-    df_c, df_u = cargar_datos("CHOFERES"), cargar_datos("UBICACIONES")
+    df_c = cargar_datos("CHOFERES")
+    df_u = cargar_datos("UBICACIONES")
+    
     if df_c.empty or df_u.empty: return None, None, None, "S/P"
     
-    # 1. Normalizamos encabezados a MAYÚSCULAS
-    df_c.columns = df_c.columns.str.strip().str.upper()
     tipo_b = tipo_sol.split(" ")[0].upper()
-
-    # 2. Filtramos conductores aptos
+    
+    # Filtro: LIBRE + TIPO VEHICULO + DEUDA < 10
     libres = df_c[
-        (df_c['ESTADO'].astype(str).str.upper() == 'LIBRE') & 
-        (df_c['TIPO_VEHICULO'].astype(str).str.upper().str.contains(tipo_b))
+        (df_c['ESTADO'].astype(str) == 'LIBRE') & 
+        (df_c['TIPO_VEHICULO'].astype(str).str.contains(tipo_b, na=False)) &
+        (pd.to_numeric(df_c['DEUDA'], errors='coerce').fillna(0) < 10.00)
     ]
-
-    # 3. Filtro de DEUDA (Candado de seguridad)
-    if 'DEUDA' in libres.columns:
-        libres = libres[pd.to_numeric(libres['DEUDA'], errors='coerce').fillna(0) < 10.00]
 
     if libres.empty: return None, None, None, "S/P"
 
     mejor, menor = None, float('inf')
+    
     for _, chofer in libres.iterrows():
-        nom = f"{str(chofer['NOMBRE']).strip()} {str(chofer['APELLIDO']).strip()}".upper()
-        ubi = df_u[df_u['Conductor'].astype(str).str.upper().str.strip() == nom]
+        # Construcción robusta del nombre
+        nom_c = str(chofer.get('NOMBRE', '')).strip()
+        ape_c = str(chofer.get('APELLIDO', '')).strip()
+        nombre_completo = f"{nom_c} {ape_c}".upper()
+        
+        # Buscar ubicación
+        ubi = df_u[df_u['CONDUCTOR'].astype(str).str.upper().str.strip() == nombre_completo]
+        
         if not ubi.empty:
             try:
-                lat_cond = float(ubi.iloc[-1]['Latitud'])
-                lon_cond = float(ubi.iloc[-1]['Longitud'])
+                lat_cond = float(ubi.iloc[-1]['LATITUD'])
+                lon_cond = float(ubi.iloc[-1]['LONGITUD'])
                 d = math.sqrt((lat_cli - lat_cond)**2 + (lon_cli - lon_cond)**2)
-                if d < menor: menor, mejor = d, chofer
+                if d < menor: 
+                    menor = d
+                    mejor = chofer
             except: continue
 
     if mejor is not None:
-        # 4. EXTRACCIÓN FINAL USANDO MAYÚSCULAS
-        t = str(mejor.get('TELEFONO', '0000000000')).split('.')[0].strip()
+        t = str(mejor.get('TELEFONO', '0000000000')).split('.')[0]
         foto = str(mejor.get('FOTO_PERFIL', 'SIN_FOTO'))
         placa = str(mejor.get('PLACA', 'S/P'))
         return mejor, t, foto, placa
@@ -132,16 +133,17 @@ if not st.session_state.viaje_confirmado:
         tipo_veh = st.selectbox("¿Qué necesitas?", ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔"])
         enviar = st.form_submit_button("🚖 SOLICITAR UNIDAD")
 
+    # --- LÓGICA DE ENVÍO CORREGIDA ---
     if enviar and nombre_cli and ref_cli:
         with st.spinner("🔄 Buscando unidad..."):
             chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
             
             if chof is not None:
-                nombre_chof = f"{chof['NOMBRE']} {chof['APELLIDO']}" 
+                nombre_chof = f"{chof['NOMBRE']} {chof['APELLIDO']}"
                 id_v = f"TX-{random.randint(1000, 9999)}"
                 mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
                 
-                # 🚀 Registro del pedido en la hoja VIAJES
+                # 🚀 1. REGISTRAR PEDIDO
                 res = enviar_datos_a_sheets({
                     "accion": "registrar_pedido",
                     "id_viaje": id_v,
@@ -153,12 +155,16 @@ if not st.session_state.viaje_confirmado:
                     "mapa": mapa_url
                 })
                 
-                # DIAGNÓSTICO: Verifica respuesta del servidor
+                # Muestra la respuesta REAL del servidor para confirmar
                 st.write(f"Respuesta del servidor: {res}")
                 
-                if res != "Error":
-                    # Cambiamos al chofer a OCUPADO inmediatamente en la hoja CHOFERES
-                    enviar_datos_a_sheets({"accion": "cambiar_estado", "conductor": nombre_chof, "estado": "OCUPADO"})
+                # 🚀 2. SI TODO SALIÓ BIEN, ACTUALIZAR ESTADO
+                if "Registrado" in res or "Ok" in res or res == "Pedido Registrado":
+                    enviar_datos_a_sheets({
+                        "accion": "cambiar_estado", 
+                        "conductor": nombre_chof, 
+                        "estado": "OCUPADO"
+                    })
                     
                     st.session_state.viaje_confirmado = True
                     st.session_state.datos_pedido = {
@@ -169,16 +175,19 @@ if not st.session_state.viaje_confirmado:
                     }
                     st.rerun()
                 else:
-                    st.error("❌ No se pudo conectar con el servidor de viajes.")
+                    st.error(f"❌ Error al conectar: {res}")
+            else:
+                st.warning("⚠️ No hay conductores disponibles cerca o libres en este momento.")
 
 if st.session_state.viaje_confirmado:
     dp = st.session_state.datos_pedido
     
     st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 ID: {dp["id"]}</span></div>', unsafe_allow_html=True)
     
+    # Manejo de Foto
     foto_data = dp.get('foto', "SIN_FOTO")
     st.markdown('<div style="text-align:center; margin-bottom:15px;">', unsafe_allow_html=True)
-    if foto_data and foto_data != "SIN_FOTO" and len(str(foto_data)) > 100:
+    if foto_data and len(str(foto_data)) > 100:
         try:
             img_bytes = base64.b64decode(foto_data)
             st.image(io.BytesIO(img_bytes), width=150)
@@ -189,31 +198,37 @@ if st.session_state.viaje_confirmado:
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.success(f"✅ Conductor **{dp['chof']}** asignado.")
+    
     msg_wa = urllib.parse.quote(f"🚖 *PEDIDO*\n🆔 *ID:* {dp['id']}\n👤 Cliente: {dp['nombre']}\n📍 Ref: {dp['ref']}\n🗺️ *Mapa:* {dp['mapa']}")
     st.markdown(f'<a href="https://api.whatsapp.com/send?phone={dp["t_chof"]}&text={msg_wa}" target="_blank" style="background-color:#25D366;color:white;padding:15px;text-align:center;display:block;text-decoration:none;font-weight:bold;font-size:20px;border-radius:10px;">📲 CONTACTAR CONDUCTOR</a>', unsafe_allow_html=True)
 
-    if st.button("❌ NUEVO PEDIDO"):
+    if st.button("❌ NUEVO PEDIDO / CANCELAR"):
         st.session_state.viaje_confirmado = False
         st.rerun()
 
     st.write("---")
 
+    # --- MAPA Y SEGUIMIENTO ---
     try:
         df_u = cargar_datos("UBICACIONES")
-        pos_t = df_u[df_u['Conductor'].astype(str).str.upper().str.strip() == str(dp['chof']).upper().strip()]
+        # Filtro estricto por nombre
+        pos_t = df_u[df_u['CONDUCTOR'].astype(str).str.upper().str.strip() == str(dp['chof']).upper().strip()]
         
         if not pos_t.empty:
             pos_t = pos_t.iloc[-1]
-            lat_t, lon_t = float(pos_t['Latitud']), float(pos_t['Longitud'])
+            lat_t, lon_t = float(pos_t['LATITUD']), float(pos_t['LONGITUD'])
+            
             dist_km = calcular_distancia_real(lat_t, lon_t, dp['lat_cli'], dp['lon_cli'])
             tiempo_min = round((dist_km / 30) * 60) + 2 
             txt_eta = f"Llega en aprox. {tiempo_min} min" if tiempo_min > 1 else "¡Llegando!"
+            
             st.markdown(f'<div class="eta-box">🕒 {txt_eta} ({dist_km:.2f} km)</div>', unsafe_allow_html=True)
             
             camino_data = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
+            
             puntos_mapa = pd.DataFrame([
-                {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "color": [34, 139, 34], "info": "👤 TÚ (Punto de Encuentro)"},
-                {"lon": lon_t, "lat": lat_t, "color": [255, 215, 0], "info": f"🚖 CONDUCTOR: {dp['chof']}\n🏷️ PLACA: {dp['placa']}"}
+                {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "color": [34, 139, 34], "info": "👤 TÚ"},
+                {"lon": lon_t, "lat": lat_t, "color": [255, 215, 0], "info": f"🚖 {dp['chof']}"}
             ])
 
             st.pydeck_chart(pdk.Deck(
@@ -221,15 +236,16 @@ if st.session_state.viaje_confirmado:
                 initial_view_state=pdk.ViewState(latitude=lat_t, longitude=lon_t, zoom=15, pitch=0),
                 tooltip={"text": "{info}"},
                 layers=[
-                    pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[255, 0, 0], get_width=8, cap_rounded=True),
-                    pdk.Layer("ScatterplotLayer", data=puntos_mapa, get_position="[lon, lat]", get_color="color", get_radius=15, stroked=True, pickable=True)
+                    pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[255, 0, 0], get_width=5),
+                    pdk.Layer("ScatterplotLayer", data=puntos_mapa, get_position="[lon, lat]", get_color="color", get_radius=20, pickable=True)
                 ]
             ))
+            
             if st.button("🔄 ACTUALIZAR UBICACIÓN"):
                 st.rerun()
         else:
-            st.warning("📡 Buscando señal del conductor...")
+            st.warning("📡 Buscando señal GPS del conductor...")
     except Exception as e:
-        st.info("⌛ Recibiendo coordenadas...")
+        st.info("⌛ Iniciando sistema de rastreo...")
 
 st.markdown('<div style="text-align:center; color:#555; font-size:15px; margin-top:10px; font-weight: bold;">📩 contacto: taxi-seguro-word@hotmail.com</div>', unsafe_allow_html=True)
