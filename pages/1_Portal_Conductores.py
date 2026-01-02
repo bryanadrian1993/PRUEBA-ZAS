@@ -184,36 +184,44 @@ if st.session_state.usuario_activo:
             st.rerun() 
         # ---------------------------------------------------
 
-        st.info(f"Estado Actual: **{estado_actual}**")
-        st.metric("Tu Deuda Actual:", f"${deuda_actual:.2f}")
-        # --- 💰 SECCIÓN DE PAGOS UNIFICADA ---
+        # --- AQUÍ EMPIEZA LA CORRECCIÓN DE LA SECCIÓN DE PAGOS ---
+        
+        # 1. INDICADORES VISUALES (Siempre visibles)
+        col_m1, col_m2 = st.columns(2)
+        col_m1.metric("💸 Deuda Actual", f"${deuda_actual:.2f}")
+        col_m2.metric("🚦 Estado Actual", estado_actual)
+
+        # 2. SECCIÓN DE PAGOS (Solo aparece si debe dinero)
         if deuda_actual > 0:
             st.markdown("---")
             st.subheader("💳 Centro de Pagos")
-            st.write(f"Tu saldo pendiente es de: **${deuda_actual:.2f}**")
+            st.warning(f"Saldo pendiente: **${deuda_actual:.2f}**")
             
-            # Usamos pestañas para que el conductor elija su método preferido
+            # Pestañas de Pago
             tab_deuna, tab_paypal = st.tabs(["📲 Pagar con DEUNA", "🌎 Pagar con PAYPAL"])
             
             with tab_deuna:
-                st.write("Escanea el QR desde tu App Deuna o Banco Pichincha:")
+                st.write("**Escanea el QR:**")
                 try:
-                    # Cargamos la imagen qr_deuna.png de tu repositorio
-                    st.image("qr_deuna.png", caption="QR Oficial de Recaudación", width=280)
+                    # Asegúrate de que este archivo 'qr_deuna.png' exista en tu GitHub
+                    st.image("qr_deuna.png", caption="QR Banco Pichincha", width=250)
                 except:
-                    st.error("Error: No se encontró el archivo 'qr_deuna.png' en el repositorio.")
-                st.info("💡 Envía el comprobante al administrador para liberar tu cupo.")
+                    st.error("⚠️ No se encontró 'qr_deuna.png' en GitHub")
+                st.info("Envía el comprobante al admin.")
 
             with tab_paypal:
-                st.write("Haz clic en el botón para pagar de forma segura con tarjeta o saldo PayPal:")
+                st.write("**Pagar con saldo/tarjeta:**")
                 st.markdown(f'''
                     <a href="{LINK_PAYPAL}" target="_blank" style="text-decoration:none;">
-                        <div style="background-color:#0070ba;color:white;padding:15px;text-align:center;border-radius:10px;font-weight:bold;font-size:18px;">
-                            🔵 IR A PAGAR CON PAYPAL
+                        <div style="background-color:#0070ba;color:white;padding:12px;text-align:center;border-radius:10px;font-weight:bold;">
+                            🔵 IR A PAYPAL
                         </div>
                     </a>
                 ''', unsafe_allow_html=True)
-                st.caption("Nota: PayPal podría aplicar comisiones adicionales por transacción.")
+                st.caption("Nota: PayPal podría aplicar comisiones adicionales.")
+        
+        st.divider()
+        # --- FIN DE LA CORRECCIÓN ---
 
         # ==========================================
         # 🚀 BLOQUE INTELIGENTE: GESTIÓN DE VIAJE
@@ -225,7 +233,6 @@ if st.session_state.usuario_activo:
         viaje_activo = pd.DataFrame() 
 
         # 2. Filtramos: ¿Existe un viaje "EN CURSO" para este conductor?
-        # Corregido: Buscamos en la columna 'Conductor' (no 'Conductor Asignado')
         if not df_viajes.empty and 'Conductor' in df_viajes.columns:
             viaje_activo = df_viajes[
                 (df_viajes['Conductor'].astype(str).str.upper() == nombre_completo_unificado) & 
@@ -233,7 +240,6 @@ if st.session_state.usuario_activo:
             ]
 
         # 3. DECISIÓN DEL SISTEMA
-        # CORRECCIÓN: Agregamos 'and "OCUPADO" in estado_actual' para borrar el botón apenas cobres
         if not viaje_activo.empty and "OCUPADO" in estado_actual:
             
             # CASO A: HAY PASAJERO -> Mostramos datos y el botón de Finalizar
@@ -296,14 +302,7 @@ if st.session_state.usuario_activo:
             # CASO B: NO HAY PASAJERO -> Verificamos deuda antes de permitir trabajar
             if deuda_actual >= 10.00:
                 st.error(f"🚫 CUENTA BLOQUEADA: Tu deuda (${deuda_actual:.2f}) supera el límite de $10.00")
-                st.info("Para volver a recibir viajes, por favor cancela tu saldo pendiente.")
-                st.markdown(f'''
-                    <a href="{LINK_PAYPAL}" target="_blank" style="text-decoration:none;">
-                        <div style="background-color:#0070ba;color:white;padding:12px;text-align:center;border-radius:10px;font-weight:bold;">
-                            💳 PAGAR DEUDA CON PAYPAL
-                        </div>
-                    </a>
-                ''', unsafe_allow_html=True)
+                st.info("Para volver a recibir viajes, por favor cancela tu saldo pendiente usando la sección de pagos arriba.")
                 
                 # Botón deshabilitado para evitar que el chofer se ponga LIBRE
                 st.button("🟢 PONERME LIBRE", disabled=True, help="Debes pagar tu deuda para activar este botón")
