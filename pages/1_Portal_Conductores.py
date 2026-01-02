@@ -210,12 +210,13 @@ if st.session_state.usuario_activo:
             ]
 
         # 3. DECISIÓN DEL SISTEMA
-        if not viaje_activo.empty:
+        # CORRECCIÓN: Agregamos 'and "OCUPADO" in estado_actual' para borrar el botón apenas cobres
+        if not viaje_activo.empty and "OCUPADO" in estado_actual:
+            
             # CASO A: HAY PASAJERO -> Mostramos datos y el botón de Finalizar
             datos_v = viaje_activo.iloc[-1]
             st.warning("🚖 TIENES UN PASAJERO A BORDO")
             
-            # Corregido: Usamos .get() y los nombres reales de las columnas del Script
             st.write(f"👤 **Cliente:** {datos_v.get('Cliente', 'S/D')}")
             st.write(f"📞 **Tel:** {datos_v.get('Tel Cliente', 'S/D')}")
             st.write(f"📍 **Destino:** {datos_v.get('Referencia', 'S/D')}")
