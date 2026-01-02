@@ -13,7 +13,7 @@ from streamlit_js_eval import get_geolocation
 import requests
 
 # --- ⚙️ CONFIGURACIÓN DE NEGOCIO ---
-TARIFA_POR_KM = 0.25
+TARIFA_POR_KM = 0.05
 DEUDA_MAXIMA = 10.00
 LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO"
 
