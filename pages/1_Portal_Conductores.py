@@ -6,27 +6,28 @@ import base64
 import math
 import os
 import time
-import io                  
-from PIL import Image       
+import io
+from PIL import Image
 from datetime import datetime
 from streamlit_js_eval import get_geolocation
+import requests
 
 # --- ⚙️ CONFIGURACIÓN DE NEGOCIO ---
-TARIFA_POR_KM = 0.05        
-DEUDA_MAXIMA = 10.00        
-LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO" 
+TARIFA_POR_KM = 0.25
+DEUDA_MAXIMA = 10.00
+LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO"
 
 # --- 🔗 CONFIGURACIÓN TÉCNICA ---
 st.set_page_config(page_title="Portal Conductores", page_icon="🚖", layout="centered")
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
-import requests 
 
-def enviar_datos(params):
+def enviar_datos_requests(params):
     try:
         requests.post(URL_SCRIPT, params=params)
     except Exception as e:
         st.error(f"Error de conexión: {e}")
+
 # --- 🔄 INICIALIZAR SESIÓN ---
 if 'usuario_activo' not in st.session_state: st.session_state.usuario_activo = False
 if 'datos_usuario' not in st.session_state: st.session_state.datos_usuario = {}
@@ -35,6 +36,7 @@ if 'datos_usuario' not in st.session_state: st.session_state.datos_usuario = {}
 PAISES = ["Ecuador", "Colombia", "Perú", "México", "España", "Otro"]
 IDIOMAS = ["Español", "English"]
 VEHICULOS = ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔", "Moto Entrega 🏍️"]
+
 # --- 🛰️ CAPTURA AUTOMÁTICA DE GPS ---
 loc = get_geolocation()
 if loc and 'coords' in loc:
@@ -42,6 +44,7 @@ if loc and 'coords' in loc:
     lon_actual = loc['coords']['longitude']
 else:
     lat_actual, lon_actual = None, None
+
 # --- 🛠️ FUNCIONES ---
 def cargar_datos(hoja):
     # --- IDs EXTRAÍDOS DE TUS IMÁGENES ---
@@ -98,7 +101,9 @@ if st.session_state.usuario_activo:
     # Buscamos la foto: primero en la sesión (por si acaba de cambiar) y luego en el Excel
     foto_actual = st.session_state.datos_usuario.get('Foto_Perfil', 'SIN_FOTO')
     if foto_actual == "SIN_FOTO" and not fila_actual.empty:
-        foto_actual = fila_actual.iloc[0]['Foto_Perfil']
+        try:
+            foto_actual = fila_actual.iloc[0]['Foto_Perfil']
+        except: pass
 
     col_img, col_btn = st.columns([1, 2])
 
@@ -156,9 +161,9 @@ if st.session_state.usuario_activo:
     
     # --- MOSTRAR INFORMACIÓN DEL SOCIO ---
     if not fila_actual.empty:
-        # [cite_start]Columna R (Índice 17) es DEUDA [cite: 1]
+        # Columna R (Índice 17) es DEUDA
         deuda_actual = float(fila_actual.iloc[0, 17])
-        # [cite_start]Columna I (Índice 8) es Estado [cite: 1]
+        # Columna I (Índice 8) es Estado
         estado_actual = str(fila_actual.iloc[0, 8]) 
         if deuda_actual >= DEUDA_MAXIMA and "LIBRE" in estado_actual.upper():
             st.error("⚠️ DESCONEXIÓN AUTOMÁTICA: Tu deuda superó el límite permitido.")
@@ -172,7 +177,6 @@ if st.session_state.usuario_activo:
             st.rerun() 
         # ---------------------------------------------------
 
-        st.info(f"Estado Actual: **{estado_actual}**")
         st.info(f"Estado Actual: **{estado_actual}**")
         st.metric("Tu Deuda Actual:", f"${deuda_actual:.2f}")
         st.success(f"✅ Socio: **{nombre_completo_unificado}**")
@@ -236,10 +240,10 @@ if st.session_state.usuario_activo:
                         # Ajuste de seguridad: Mínimo 1 km
                         if distancia < 1.0: distancia = 1.0
                         
-                        # 2. Cálculo de Comisión ($0.05 por km según tu config)
+                        # 2. Cálculo de Comisión
                         comision_nueva = round(distancia * TARIFA_POR_KM, 2)
                         
-                        # 3. ENVIAR AL SCRIPT (Corregido: variable nombre_completo_unificado)
+                        # 3. ENVIAR AL SCRIPT
                         res = enviar_datos_a_sheets({
                             "accion": "finalizar_y_deuda",
                             "conductor": nombre_completo_unificado,
@@ -256,9 +260,6 @@ if st.session_state.usuario_activo:
                             st.error("❌ Error de conexión con el servidor.")
                     except Exception as e:
                         st.error(f"❌ Error técnico: {e}") 
-
-        else:
-                        st.rerun()
 
         else:
             # CASO B: NO HAY PASAJERO -> Verificamos deuda antes de permitir trabajar
@@ -316,8 +317,6 @@ if st.session_state.usuario_activo:
 else:
     # --- PANTALLA INICIAL: LOGIN Y REGISTRO ---
     tab_log, tab_reg = st.tabs(["🔐 INGRESAR", "📝 REGISTRARME"])
-
-
     
     with tab_log:
         st.subheader("Acceso Socios")
@@ -339,30 +338,30 @@ else:
             else:
                 st.error("❌ Datos incorrectos o usuario no encontrado.")
     st.markdown("---") 
-with st.expander("¿Olvidaste tu contraseña?"):
-    st.info("Ingresa tu correo registrado para recibir tu clave:")
-    email_recup = st.text_input("Tu Email", key="email_recup")
-    
-    if st.button("📧 Recuperar Clave"):
-        if "@" in email_recup:
-            with st.spinner("Conectando con el sistema..."):
-                try:
-                    # Petición al Script de Google
-                    resp = requests.post(URL_SCRIPT, params={
-                        "accion": "recuperar_clave",
-                        "email": email_recup
-                    })
-                    
-                    if "CORREO_ENVIADO" in resp.text:
-                        st.success("✅ ¡Enviado! Revisa tu correo (Bandeja de entrada o Spam).")
-                    elif "EMAIL_NO_ENCONTRADO" in resp.text:
-                        st.error("❌ Ese correo no está registrado como socio.")
-                    else:
-                        st.error("Error de conexión.")
-                except:
-                    st.error("Error al conectar con el servidor.")
-        else:
-            st.warning("Escribe un correo válido.")
+    with st.expander("¿Olvidaste tu contraseña?"):
+        st.info("Ingresa tu correo registrado para recibir tu clave:")
+        email_recup = st.text_input("Tu Email", key="email_recup")
+        
+        if st.button("📧 Recuperar Clave"):
+            if "@" in email_recup:
+                with st.spinner("Conectando con el sistema..."):
+                    try:
+                        # Petición al Script de Google
+                        resp = requests.post(URL_SCRIPT, params={
+                            "accion": "recuperar_clave",
+                            "email": email_recup
+                        })
+                        
+                        if "CORREO_ENVIADO" in resp.text:
+                            st.success("✅ ¡Enviado! Revisa tu correo (Bandeja de entrada o Spam).")
+                        elif "EMAIL_NO_ENCONTRADO" in resp.text:
+                            st.error("❌ Ese correo no está registrado como socio.")
+                        else:
+                            st.error("Error de conexión.")
+                    except:
+                        st.error("Error al conectar con el servidor.")
+            else:
+                st.warning("Escribe un correo válido.")
     with tab_reg:
         with st.form("registro_form"):
             st.subheader("Registro de Nuevos Socios")
