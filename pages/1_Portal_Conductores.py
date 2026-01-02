@@ -140,12 +140,16 @@ if st.session_state.usuario_activo:
             time.sleep(1)
             st.rerun()
 
-        # Métricas
+        # -------------------------------------------------------------
+        # ✅ AQUI ESTÁ LA SECCIÓN DE PAGOS (Antes no estaba)
+        # -------------------------------------------------------------
+        
+        # 1. Métricas visuales
         col_m1, col_m2 = st.columns(2)
         col_m1.metric("💸 Deuda Actual", f"${deuda_actual:.2f}")
         col_m2.metric("🚦 Estado Actual", estado_actual)
 
-        # --- 💰 SECCIÓN DE PAGOS (Insertada Correctamente) ---
+        # 2. SECCIÓN DE PAGOS (Solo aparece si la deuda es mayor a 0)
         if deuda_actual > 0:
             st.markdown("---")
             st.subheader("💳 Centro de Pagos")
@@ -155,14 +159,18 @@ if st.session_state.usuario_activo:
             
             with tab_deuna:
                 st.write("**Escanea el QR:**")
-                try: st.image("qr_deuna.png", caption="QR Banco Pichincha", width=250)
-                except: st.error("⚠️ Sube 'qr_deuna.png' a GitHub")
+                try: 
+                    # Intenta cargar qr_deuna.png
+                    st.image("qr_deuna.png", caption="QR Banco Pichincha", width=250)
+                except: 
+                    st.error("⚠️ Sube 'qr_deuna.png' a GitHub")
                 st.info("Envía el comprobante al admin.")
 
             with tab_paypal:
                 st.write("**Pagar con saldo/tarjeta:**")
                 st.markdown(f'''<a href="{LINK_PAYPAL}" target="_blank" style="text-decoration:none;"><div style="background-color:#0070ba;color:white;padding:12px;text-align:center;border-radius:10px;font-weight:bold;">🔵 IR A PAYPAL</div></a>''', unsafe_allow_html=True)
             st.divider()
+        # -------------------------------------------------------------
 
         # --- GESTIÓN DE VIAJE ---
         st.subheader("Gestión de Viaje")
