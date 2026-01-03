@@ -1,4 +1,33 @@
 import streamlit as st
+import gspread
+from google.oauth2.service_account import Credentials
+
+# --- 🧪 INICIO PRUEBA DE ESCRITURA ---
+st.warning("⚠️ MODO PRUEBA ACTIVADO: Intentando escribir en Excel...")
+
+try:
+    # 1. Conectar
+    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
+    client = gspread.authorize(creds)
+    
+    # 2. Abrir Excel y Hoja (Usa la primera hoja que encuentre, sin importar el nombre)
+    sh = client.open("BD_TAXI_PRUEBAS")
+    wks = sh.get_worksheet(0) 
+    
+    # 3. Escribir
+    wks.append_row(["PRUEBA", "DE", "CONEXIÓN", "EXITOSA", "✅"])
+    st.success(f"✅ ¡LOGRADO! Se escribió en la hoja: '{wks.title}' del archivo '{sh.title}'")
+    st.info("Ahora borra este código de prueba y vuelve a registrar al conductor.")
+    st.stop() # Detiene la app para que veas el mensaje
+
+except Exception as e:
+    st.error(f"❌ ERROR DE ESCRITURA: {e}")
+    st.write("Asegúrate de haber compartido el Excel con este correo exacto:")
+    st.code(creds.service_account_email)
+    st.stop()
+# --- 🧪 FIN PRUEBA ---
+import streamlit as st
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
