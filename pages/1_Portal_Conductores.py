@@ -11,6 +11,7 @@ from PIL import Image
 from datetime import datetime
 from streamlit_js_eval import get_geolocation
 import requests
+import streamlit.components.v1 as components
 
 # --- ⚙️ CONFIGURACIÓN DE NEGOCIO ---
 TARIFA_POR_KM = 0.05
@@ -21,6 +22,48 @@ LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO"
 st.set_page_config(page_title="Portal Conductores", page_icon="🚖", layout="centered")
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
+
+# --- FUNCIÓN DE PAGO PAYPAL ---
+def mostrar_boton_pago():
+    st.header("🔓 Desbloqueo Automático (PayPal)")
+    st.write("Paga tu suscripción y tu cuenta se activará al instante.")
+
+    # 1. Pedimos la Cédula
+    cedula_conductor = st.text_input("Ingresa tu número de Cédula para pagar:", max_chars=10)
+
+    if cedula_conductor:
+        client_id = "AS96Gq4_mueF7i7xjUzx2nEgYSmiS6t69datLVrPMwxDIxboQC00sZf7TBM6KwkRxUL92ys0I-JXXq_y"
+        valor_a_pagar = "5.00"
+
+        paypal_html = f"""
+        <div id="paypal-button-container"></div>
+        <script src="https://www.paypal.com/sdk/js?client-id={client_id}&currency=USD"></script>
+        <script>
+            paypal.Buttons({{
+                createOrder: function(data, actions) {{
+                    return actions.order.create({{
+                        purchase_units: [{{
+                            amount: {{ value: '{valor_a_pagar}' }},
+                            custom_id: '{cedula_conductor}'
+                        }}]
+                    }});
+                }},
+                onApprove: function(data, actions) {{
+                    return actions.order.capture().then(function(details) {{
+                        alert('¡Pago Exitoso! Tu cuenta {cedula_conductor} se está desbloqueando...');
+                    }});
+                }},
+                onError: function (err) {{
+                    console.error('Error:', err);
+                    alert('Hubo un error con el pago. Intenta de nuevo.');
+                }}
+            }}).render('#paypal-button-container');
+        </script>
+        """
+        st.caption(f"Total a pagar: ${valor_a_pagar}")
+        components.html(paypal_html, height=180)
+    else:
+        st.info("👆 Escribe tu cédula para ver el botón de pago.")
 
 def enviar_datos_requests(params):
     try:
@@ -183,6 +226,11 @@ if st.session_state.usuario_activo:
                 "estado": "OCUPADO"
             })
             # No hacemos st.rerun() aquí para que cargue la interfaz de abajo
+
+        # --- BOTÓN DE PAGO (Visible siempre que haya deuda alta) ---
+        if deuda_actual >= DEUDA_MAXIMA:
+            st.error(f"⚠️ TU CUENTA ESTÁ BLOQUEADA. Debes: ${deuda_actual}")
+            mostrar_boton_pago()
         
         # ---------------------------------------------------
         # 💰 SECCIÓN DE PAGOS UNIFICADA (Aquí está lo nuevo)
@@ -193,7 +241,7 @@ if st.session_state.usuario_activo:
         col_m1.metric("💸 Deuda Actual", f"${deuda_actual:.2f}")
         col_m2.metric("🚦 Estado Actual", estado_actual)
 
-        # 2. SECCIÓN DE PAGOS (Solo aparece si debe dinero)
+        # 2. SECCIÓN DE PAGOS (Solo aparece si debe dinero y no está bloqueado crítico o si quiere adelantar)
         if deuda_actual > 0:
             st.markdown("---")
             st.subheader("💳 Centro de Pagos")
@@ -351,7 +399,7 @@ if st.session_state.usuario_activo:
             else:
                 st.info("Aún no tienes historial de viajes.")
         else:
-            st.write("Cargando datos...")    
+            st.write("Cargando datos...")     
     
     if st.button("🔒 CERRAR SESIÓN"):
         st.session_state.usuario_activo = False
@@ -471,9 +519,6 @@ else:
                     st.warning("Por favor, completa los campos obligatorios (*)")
 
 st.markdown('<div style="text-align:center; color:#888; font-size:12px; margin-top:50px;">© 2025 Taxi Seguro Global</div>', unsafe_allow_html=True)
-# 👇 PEGA ESTO AL FINAL DEL ARCHIVO (Línea 260 en adelante) 👇
-
-import time
 
 # El Radar: Solo se activa si hay un usuario logueado y está LIBRE
 if st.session_state.get('usuario_activo', False):
