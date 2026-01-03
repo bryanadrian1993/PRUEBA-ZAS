@@ -2,28 +2,31 @@ import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
 
-# --- 🧪 INICIO PRUEBA DE ESCRITURA ---
-st.warning("⚠️ MODO PRUEBA ACTIVADO: Intentando escribir en Excel...")
+# --- 🧪 INICIO PRUEBA DE ESCRITURA (VERSIÓN CORREGIDA) ---
+st.warning("⚠️ MODO PRUEBA 2: Intentando escribir con permisos de Drive...")
 
 try:
-    # 1. Conectar
-    scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+    # 1. Conectar con DOBLE PERMISO (Sheets + Drive)
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
     creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
     client = gspread.authorize(creds)
     
-    # 2. Abrir Excel y Hoja (Usa la primera hoja que encuentre, sin importar el nombre)
+    # 2. Abrir Excel y Hoja
     sh = client.open("BD_TAXI_PRUEBAS")
     wks = sh.get_worksheet(0) 
     
     # 3. Escribir
-    wks.append_row(["PRUEBA", "DE", "CONEXIÓN", "EXITOSA", "✅"])
+    wks.append_row(["PRUEBA", "DE", "DRIVE", "EXITOSA", "✅"])
     st.success(f"✅ ¡LOGRADO! Se escribió en la hoja: '{wks.title}' del archivo '{sh.title}'")
-    st.info("Ahora borra este código de prueba y vuelve a registrar al conductor.")
-    st.stop() # Detiene la app para que veas el mensaje
+    st.info("¡IMPORTANTE! Ahora debes agregar estos mismos 'scopes' en tu código principal.")
+    st.stop() 
 
 except Exception as e:
-    st.error(f"❌ ERROR DE ESCRITURA: {e}")
-    st.write("Asegúrate de haber compartido el Excel con este correo exacto:")
+    st.error(f"❌ ERROR: {e}")
+    st.write("Verifica que compartiste el Excel con:")
     st.code(creds.service_account_email)
     st.stop()
 # --- 🧪 FIN PRUEBA ---
