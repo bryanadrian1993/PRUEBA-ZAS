@@ -537,11 +537,11 @@ else:
             if st.form_submit_button("✅ COMPLETAR REGISTRO"):
                 if r_nom and r_email and r_pass1:
                     
-                    # --- ⚙️ PROCESAR FOTO ---
+                    # 1. PROCESAR FOTO (Si subió alguna)
                     foto_para_guardar = "SIN_FOTO"
                     if archivo_foto_reg is not None:
                         try:
-                            img = Image.open(archivo_foto_reg).convert('RGB') # Aseguramos formato
+                            img = Image.open(archivo_foto_reg).convert('RGB')
                             img = img.resize((150, 150))
                             buffered = io.BytesIO()
                             img.save(buffered, format="JPEG", quality=70)
@@ -549,18 +549,18 @@ else:
                         except Exception as e:
                             st.error(f"Error procesando imagen: {e}")
 
-                    # --- 💾 GUARDAR DIRECTAMENTE EN EXCEL (MÉTODO SEGURO) ---
+                    # 2. GUARDAR EN EXCEL DIRECTAMENTE
                     try:
                         with st.spinner("Registrando conductor..."):
-                            # 1. Abrir hoja. IMPORTANTE: Asegúrate que tu pestaña se llame "Sheet1"
+                            # Abrir hoja
                             sh = client.open("BD_TAXI_PRUEBAS")
+                            # Intentamos encontrar la hoja correcta
                             try:
                                 wks = sh.worksheet("Sheet1")
                             except:
-                                wks = sh.worksheet("Hoja 1") # Intento alternativo
+                                wks = sh.worksheet("Hoja 1") 
 
-                            # 2. Preparar los datos en ORDEN DE COLUMNAS
-                            # (Fecha, Nombre, Apellido, Cedula, Email, Direccion, Telefono, Placa, Estado, Vence, Clave, Foto, Validado)
+                            # Preparar los datos
                             nueva_fila = [
                                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # Fecha
                                 r_nom,
@@ -570,14 +570,14 @@ else:
                                 r_dir,
                                 r_telf,
                                 r_pla,
-                                "LIBRE",        # Estado inicial
-                                "",             # Vence_Suscripcion (Vacio)
-                                r_pass1,
+                                "LIBRE",        # Estado
+                                "",             # Vence
+                                r_pass1,        # Clave
                                 foto_para_guardar,
                                 "NO"            # Validado
                             ]
 
-                            # 3. Escribir fila
+                            # Escribir fila
                             wks.append_row(nueva_fila)
                             
                             st.success("✅ ¡Registro Exitoso! Ya puedes ingresar desde la pestaña superior.")
@@ -587,7 +587,6 @@ else:
                         st.error(f"❌ Error al guardar en Excel: {e}")
                 else:
                     st.warning("Por favor, completa los campos obligatorios (*)")
-    
                     # --- 📤 3. AGREGAMOS LA FOTO AL ENVÍO ---
                     res = enviar_datos({
                         "accion": "registrar_conductor", 
