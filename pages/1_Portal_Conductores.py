@@ -1,36 +1,4 @@
 import streamlit as st
-import gspread
-from google.oauth2.service_account import Credentials
-
-# --- 🧪 INICIO PRUEBA DE ESCRITURA (VERSIÓN CORREGIDA) ---
-st.warning("⚠️ MODO PRUEBA 2: Intentando escribir con permisos de Drive...")
-
-try:
-    # 1. Conectar con DOBLE PERMISO (Sheets + Drive)
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
-    client = gspread.authorize(creds)
-    
-    # 2. Abrir Excel y Hoja
-    sh = client.open("BD_TAXI_PRUEBAS")
-    wks = sh.get_worksheet(0) 
-    
-    # 3. Escribir
-    wks.append_row(["PRUEBA", "DE", "DRIVE", "EXITOSA", "✅"])
-    st.success(f"✅ ¡LOGRADO! Se escribió en la hoja: '{wks.title}' del archivo '{sh.title}'")
-    st.info("¡IMPORTANTE! Ahora debes agregar estos mismos 'scopes' en tu código principal.")
-    st.stop() 
-
-except Exception as e:
-    st.error(f"❌ ERROR: {e}")
-    st.write("Verifica que compartiste el Excel con:")
-    st.code(creds.service_account_email)
-    st.stop()
-# --- 🧪 FIN PRUEBA ---
-import streamlit as st
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
@@ -48,6 +16,14 @@ from datetime import datetime
 from streamlit_js_eval import get_geolocation
 import requests
 import streamlit.components.v1 as components
+
+# --- 🔌 CONEXIÓN SEGURA A GOOGLE SHEETS ---
+scopes = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
+client = gspread.authorize(creds)
 
 # --- ⚙️ CONFIGURACIÓN DE NEGOCIO ---
 TARIFA_POR_KM = 0.05
@@ -561,19 +537,56 @@ else:
             if st.form_submit_button("✅ COMPLETAR REGISTRO"):
                 if r_nom and r_email and r_pass1:
                     
-                    # --- ⚙️ 2. NUEVO: PROCESAR FOTO A BASE64 ---
-                    foto_para_guardar = "SIN_FOTO" # Valor por defecto
-    
+                    # --- ⚙️ PROCESAR FOTO ---
+                    foto_para_guardar = "SIN_FOTO"
                     if archivo_foto_reg is not None:
                         try:
-                            img = Image.open(archivo_foto_reg)
-                            img = img.resize((150, 150)) # Reducir tamaño
+                            img = Image.open(archivo_foto_reg).convert('RGB') # Aseguramos formato
+                            img = img.resize((150, 150))
                             buffered = io.BytesIO()
                             img.save(buffered, format="JPEG", quality=70)
                             foto_para_guardar = base64.b64encode(buffered.getvalue()).decode()
                         except Exception as e:
-                            st.error(f"Error procesando la imagen: {e}")
-                    # ---------------------------------------------
+                            st.error(f"Error procesando imagen: {e}")
+
+                    # --- 💾 GUARDAR DIRECTAMENTE EN EXCEL (MÉTODO SEGURO) ---
+                    try:
+                        with st.spinner("Registrando conductor..."):
+                            # 1. Abrir hoja. IMPORTANTE: Asegúrate que tu pestaña se llame "Sheet1"
+                            sh = client.open("BD_TAXI_PRUEBAS")
+                            try:
+                                wks = sh.worksheet("Sheet1")
+                            except:
+                                wks = sh.worksheet("Hoja 1") # Intento alternativo
+
+                            # 2. Preparar los datos en ORDEN DE COLUMNAS
+                            # (Fecha, Nombre, Apellido, Cedula, Email, Direccion, Telefono, Placa, Estado, Vence, Clave, Foto, Validado)
+                            nueva_fila = [
+                                datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # Fecha
+                                r_nom,
+                                r_ape,
+                                r_ced,
+                                r_email,
+                                r_dir,
+                                r_telf,
+                                r_pla,
+                                "LIBRE",        # Estado inicial
+                                "",             # Vence_Suscripcion (Vacio)
+                                r_pass1,
+                                foto_para_guardar,
+                                "NO"            # Validado
+                            ]
+
+                            # 3. Escribir fila
+                            wks.append_row(nueva_fila)
+                            
+                            st.success("✅ ¡Registro Exitoso! Ya puedes ingresar desde la pestaña superior.")
+                            st.balloons()
+                            
+                    except Exception as e:
+                        st.error(f"❌ Error al guardar en Excel: {e}")
+                else:
+                    st.warning("Por favor, completa los campos obligatorios (*)")
     
                     # --- 📤 3. AGREGAMOS LA FOTO AL ENVÍO ---
                     res = enviar_datos({
