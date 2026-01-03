@@ -480,7 +480,7 @@ else:
             st.write("📷 **Foto de Perfil** (Opcional)")
             archivo_foto_reg = st.file_uploader("Sube tu foto", type=["jpg", "png", "jpeg"])
             
-            # --- BOTÓN DE REGISTRO DIRECTO A EXCEL ---
+            # --- BOTÓN DE REGISTRO DIRECTO A EXCEL (SOLUCIÓN DEFINITIVA) ---
             if st.form_submit_button("✅ COMPLETAR REGISTRO"):
                 if r_nom and r_email and r_pass1:
                     
@@ -496,14 +496,13 @@ else:
                         except Exception as e:
                             st.error(f"Error procesando imagen: {e}")
 
-                    # 2. GUARDAR EN EXCEL (CON CÓDIGO CORREGIDO)
+                    # 2. GUARDAR EN EXCEL (USANDO LA PRIMERA HOJA DISPONIBLE)
                     try:
                         with st.spinner("Registrando conductor..."):
                             sh = client.open("BD_TAXI_PRUEBAS")
-                            try:
-                                wks = sh.worksheet("Sheet1")
-                            except:
-                                wks = sh.worksheet("Hoja 1") 
+                            
+                            # SOLUCIÓN: Usamos la hoja índice 0 (la primera), sin importar el nombre
+                            wks = sh.get_worksheet(0)
 
                             nueva_fila = [
                                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # Fecha
