@@ -1,4 +1,33 @@
 import streamlit as st
+import gspread
+from google.oauth2.service_account import Credentials
+
+# --- CÓDIGO ESPÍA DE INICIO ---
+st.title("🕵️‍♂️ MODO DETECTIVE")
+
+# 1. Configuración
+scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
+client = gspread.authorize(creds)
+
+# 2. Abrir el archivo
+try:
+    sh = client.open("BD_TAXI_PRUEBAS")
+    
+    st.error("👇 ¡AQUÍ ESTÁN LOS NOMBRES REALES DE TUS PESTAÑAS! 👇")
+    
+    # 3. IMPRIMIR EN LA PANTALLA
+    for hoja in sh.worksheets():
+        st.info(f"Nombre exacto: '{hoja.title}'") # Copia lo que salga entre comillas
+        
+except Exception as e:
+    st.error(f"Error conectando: {e}")
+
+st.stop() # DETIENE LA APP AQUÍ PARA QUE LEAS
+# --- FIN DEL CÓDIGO ESPÍA ---
+
+# ... Aquí abajo sigue tu código normal ...
+import streamlit as st
 import pandas as pd
 import urllib.parse
 import urllib.request
