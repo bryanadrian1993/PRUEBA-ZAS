@@ -35,11 +35,11 @@ def mostrar_boton_pago():
         client_id = "AS96Gq4_mueF7i7xjUzx2nEgYSmiS6t69datLVrPMwxDIxboQC00sZf7TBM6KwkRxUL92ys0I-JXXq_y"
         valor_a_pagar = "5.00"
 
-        paypal_html = f"""
-        <div id="paypal-button-container"></div>
-        <script src="https://www.paypal.com/sdk/js?client-id={client_id}&currency=USD"></script>
+        _html = f"""
+        <div id="-button-container"></div>
+        <script src="https://www..com/sdk/js?client-id={client_id}&currency=USD"></script>
         <script>
-            paypal.Buttons({{
+            .Buttons({{
                 createOrder: function(data, actions) {{
                     return actions.order.create({{
                         purchase_units: [{{
@@ -57,11 +57,11 @@ def mostrar_boton_pago():
                     console.error('Error:', err);
                     alert('Hubo un error con el pago. Intenta de nuevo.');
                 }}
-            }}).render('#paypal-button-container');
+            }}).render('#-button-container');
         </script>
         """
         st.caption(f"Total a pagar: ${valor_a_pagar}")
-        components.html(paypal_html, height=180)
+        components.html(_html, height=180)
     else:
         st.info("👆 Escribe tu cédula para ver el botón de pago.")
 
@@ -248,7 +248,7 @@ if st.session_state.usuario_activo:
             st.warning(f"Saldo pendiente: **${deuda_actual:.2f}**")
             
             # Pestañas de Pago
-            tab_deuna, tab_paypal = st.tabs(["📲 Pagar con DEUNA", "🌎 Pagar con PAYPAL"])
+            tab_deuna, tab_ = st.tabs(["📲 Pagar con DEUNA", "🌎 Pagar con PAYPAL"])
             
             with tab_deuna:
                 st.write("**Escanea el QR:**")
@@ -286,7 +286,7 @@ if st.session_state.usuario_activo:
                 
                 # Datos para PayPal
                 cedula_usuario = str(fila_actual.iloc[0, 0]) 
-                client_id = "AS96Gq4_mueF7i7xjUzx2nEgYSmiS6t69datLVrPMwxDIxboQC00sZf7TBM6KwkRxUL92ys0I-JXXq_y"
+                client_id = "AbTSfP381kOrNXmRJO8SR7IvjtjLx0Qmj1TyERiV5RzVheYAAxvgGWHJam3KE_iyfcrf56VV_k-MPYmv"
 
                 # --- 2. EL BOTÓN OFICIAL (SMART BUTTON) ---
                 paypal_html_tab = f"""
