@@ -15,7 +15,7 @@ from streamlit_js_eval import get_geolocation
 import requests
 import streamlit.components.v1 as components
 
-# --- 🔗 CONFIGURACIÓN TÉCNICA (Debe ir al principio) ---
+# --- 🔗 CONFIGURACIÓN TÉCNICA ---
 st.set_page_config(page_title="Portal Conductores", page_icon="🚖", layout="centered")
 
 # --- 🔌 CONEXIÓN SEGURA A GOOGLE SHEETS ---
@@ -24,7 +24,6 @@ scopes = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-# Intentamos conectar con las credenciales de la nube
 try:
     creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
     client = gspread.authorize(creds)
@@ -35,6 +34,7 @@ except Exception as e:
 TARIFA_POR_KM = 0.05
 DEUDA_MAXIMA = 10.00
 LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO"
+# ID CONFIRMADO DE TU IMAGEN:
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
 
@@ -42,14 +42,10 @@ URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4
 def mostrar_boton_pago():
     st.header("🔓 Desbloqueo Automático (PayPal)")
     st.write("Paga tu suscripción y tu cuenta se activará al instante.")
-
-    # 1. Pedimos la Cédula
     cedula_conductor = st.text_input("Ingresa tu número de Cédula para pagar:", max_chars=10)
-
     if cedula_conductor:
         client_id = "AS96Gq4_mueF7i7xjUzx2nEgYSmiS6t69datLVrPMwxDIxboQC00sZf7TBM6KwkRxUL92ys0I-JXXq_y"
         valor_a_pagar = "5.00"
-
         _html = f"""
         <div id="-button-container"></div>
         <script src="https://www.paypal.com/sdk/js?client-id={client_id}&currency=USD"></script>
@@ -95,7 +91,7 @@ PAISES = ["Ecuador", "Colombia", "Perú", "México", "España", "Otro"]
 IDIOMAS = ["Español", "English"]
 VEHICULOS = ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔", "Moto Entrega 🏍️"]
 
-# --- 🛰️ CAPTURA AUTOMÁTICA DE GPS ---
+# --- 🛰️ CAPTURA GPS ---
 loc = get_geolocation()
 if loc and 'coords' in loc:
     lat_actual = loc['coords']['latitude']
@@ -105,23 +101,13 @@ else:
 
 # --- 🛠️ FUNCIONES ---
 def cargar_datos(hoja):
-    # --- IDs EXTRAÍDOS DE TUS IMÁGENES ---
     GID_CHOFERES = "773119638"
     GID_VIAJES   = "0"
-    
     try:
-        # Seleccionamos el ID correcto según la hoja que pida el código
         gid_actual = GID_CHOFERES if hoja == "CHOFERES" else GID_VIAJES
-        
-        # Usamos el enlace de exportación directa
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={gid_actual}"
-        
-        # Leemos el archivo CSV
         df = pd.read_csv(url)
-        
-        # LIMPIEZA VITAL: Quitamos espacios invisibles en los títulos
         df.columns = df.columns.str.strip()
-        
         return df
     except Exception as e:
         return pd.DataFrame()
@@ -145,24 +131,19 @@ def enviar_datos_a_sheets(datos):
 st.title("🚖 Portal de Socios")
 
 if st.session_state.usuario_activo:
-    # --- PANEL DEL CONDUCTOR LOGUEADO ---
+    # --- PANEL CHOFER ---
     df_fresh = cargar_datos("CHOFERES")
     user_nom = str(st.session_state.datos_usuario['Nombre']).strip()
     user_ape = str(st.session_state.datos_usuario['Apellido']).strip()
-    
-    # Creamos el nombre completo EXACTO para sincronizar
     nombre_completo_unificado = f"{user_nom} {user_ape}".upper()
     
-    # BUSCAMOS LA FILA DEL USUARIO EN EL EXCEL
     fila_actual = df_fresh[
         (df_fresh['Nombre'].astype(str).str.upper().str.strip() == user_nom.upper()) & 
         (df_fresh['Apellido'].astype(str).str.upper().str.strip() == user_ape.upper())
     ]
     
-    # --- LÓGICA DE ACTUALIZACIÓN DE UBICACIÓN ---
     st.subheader(f"Bienvenido, {nombre_completo_unificado}")
 
-    # --- 📸 SECCIÓN DE FOTO DE PERFIL ---
     foto_actual = st.session_state.datos_usuario.get('Foto_Perfil', 'SIN_FOTO')
     if foto_actual == "SIN_FOTO" and not fila_actual.empty:
         try:
@@ -170,7 +151,6 @@ if st.session_state.usuario_activo:
         except: pass
 
     col_img, col_btn = st.columns([1, 2])
-
     with col_img:
         if foto_actual and str(foto_actual) != "nan" and len(str(foto_actual)) > 100:
             try:
@@ -184,7 +164,6 @@ if st.session_state.usuario_activo:
     with col_btn:
         st.write("📷 **¿Deseas cambiar tu foto?**")
         archivo_nuevo = st.file_uploader("Sube una imagen (150x150)", type=["jpg", "png", "jpeg"], key="panel_ch_foto")
-        
         if archivo_nuevo:
             if st.button("💾 GUARDAR NUEVA FOTO"):
                 with st.spinner("Optimizando..."):
@@ -193,13 +172,11 @@ if st.session_state.usuario_activo:
                     buffered = io.BytesIO()
                     img.save(buffered, format="JPEG", quality=60) 
                     foto_b64 = base64.b64encode(buffered.getvalue()).decode()
-                    
                     res = enviar_datos({
                         "accion": "actualizar_foto_perfil",
                         "email": fila_actual.iloc[0]['Email'],
                         "foto": foto_b64
                     })
-                    
                     if res:
                         st.success("✅ ¡Foto guardada!")
                         st.session_state.datos_usuario['Foto_Perfil'] = foto_b64
@@ -207,7 +184,6 @@ if st.session_state.usuario_activo:
                         st.rerun()
     st.write("---") 
 
-    # --- GPS ---
     if st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True):
         if lat_actual and lon_actual:
             res = enviar_datos({
@@ -221,7 +197,6 @@ if st.session_state.usuario_activo:
         else:
             st.warning("🛰️ Esperando señal de GPS... Por favor, permite el acceso en tu navegador.")
     
-    # --- MOSTRAR INFORMACIÓN DEL SOCIO ---
     if not fila_actual.empty:
         deuda_actual = float(fila_actual.iloc[0, 17])
         estado_actual = str(fila_actual.iloc[0, 8]) 
@@ -239,7 +214,6 @@ if st.session_state.usuario_activo:
             st.error(f"⚠️ TU CUENTA ESTÁ BLOQUEADA. Debes: ${deuda_actual}")
             mostrar_boton_pago()
         
-        # --- SECCIÓN DE PAGOS ---
         col_m1, col_m2 = st.columns(2)
         col_m1.metric("💸 Deuda Actual", f"${deuda_actual:.2f}")
         col_m2.metric("🚦 Estado Actual", estado_actual)
@@ -250,18 +224,15 @@ if st.session_state.usuario_activo:
             st.warning(f"Saldo pendiente: **${deuda_actual:.2f}**")
             
             tab_deuna, tab_ = st.tabs(["📲 Pagar con DEUNA", "🌎 Pagar con PAYPAL"])
-            
             with tab_deuna:
                 st.write("**Escanea el QR:**")
                 try:
                     st.image("qr_deuna.png", caption="QR Banco Pichincha", width=250)
                 except:
                     st.error("⚠️ No se encontró 'qr_deuna.png' en GitHub")
-                
                 msg_wa = f"Hola, soy {nombre_completo_unificado}. Adjunto mi comprobante de pago DEUNA para actualizar mi saldo."
                 msg_encoded = urllib.parse.quote(msg_wa)
                 numero_whatsapp = "593960643638" 
-                
                 st.markdown(f'''
                     <a href="https://wa.me/{numero_whatsapp}?text={msg_encoded}" target="_blank" style="text-decoration:none;">
                         <div style="background-color:#25D366;color:white;padding:12px;text-align:center;border-radius:10px;font-weight:bold;margin-top:10px;">
@@ -276,10 +247,8 @@ if st.session_state.usuario_activo:
                 sugerencia = float(deuda_actual) if deuda_actual > 0 else 5.00
                 st.write("Confirma o escribe la cantidad a pagar:")
                 monto_final = st.number_input("Monto a Pagar ($):", min_value=1.00, value=sugerencia, step=1.00)
-                
                 cedula_usuario = str(fila_actual.iloc[0, 0]) 
                 client_id = "AbTSfP381kOrNXmRJO8SR7IvjtjLx0Qmj1TyERiV5RzVheYAAxvgGWHJam3KE_iyfcrf56VV_k-MPYmv"
-
                 paypal_html_tab = f"""
                 <div id="paypal-button-container-tab"></div>
                 <script src="https://www.paypal.com/sdk/js?client-id={client_id}&currency=USD"></script>
@@ -306,7 +275,6 @@ if st.session_state.usuario_activo:
                 </script>
                 """
                 components.html(paypal_html_tab, height=180)
-                
                 if deuda_actual >= DEUDA_MAXIMA:
                     minimo_para_desbloqueo = deuda_actual - DEUDA_MAXIMA + 0.01
                     st.error(f"⚠️ CUENTA BLOQUEADA (Deuda: ${deuda_actual}).")
@@ -315,20 +283,16 @@ if st.session_state.usuario_activo:
                     st.warning(f"Tienes deuda pendiente, pero aún puedes trabajar (Límite: ${DEUDA_MAXIMA}).")
                 else:
                     st.success("✅ Estás al día. Puedes recargar saldo a favor.")
-        
         st.divider()
 
-        # --- GESTIÓN DE VIAJE ---
         st.subheader("Gestión de Viaje")
         df_viajes = cargar_datos("VIAJES")
         viaje_activo = pd.DataFrame() 
-
         if not df_viajes.empty and 'Conductor' in df_viajes.columns:
             viaje_activo = df_viajes[
                 (df_viajes['Conductor'].astype(str).str.upper() == nombre_completo_unificado) & 
                 (df_viajes['Estado'].astype(str) == "EN CURSO")
             ]
-
         if not viaje_activo.empty and "OCUPADO" in estado_actual:
             datos_v = viaje_activo.iloc[-1]
             st.warning("🚖 TIENES UN PASAJERO A BORDO")
@@ -336,7 +300,6 @@ if st.session_state.usuario_activo:
             st.write(f"📞 **Tel:** {datos_v.get('Tel Cliente', 'S/D')}")
             st.write(f"📍 **Destino:** {datos_v.get('Referencia', 'S/D')}")
             st.markdown(f"[🗺️ Ver Mapa]({datos_v.get('Mapa', '#')})")
-
             if st.button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True):
                 with st.spinner("Calculando distancia y actualizando deuda..."):
                     try:
@@ -353,17 +316,14 @@ if st.session_state.usuario_activo:
                                 c = 2 * math.asin(math.sqrt(a))
                                 distancia = 6371 * c 
                             except: pass
-                        
                         if distancia < 1.0: distancia = 1.0
                         comision_nueva = round(distancia * TARIFA_POR_KM, 2)
-                        
                         res = enviar_datos_a_sheets({
                             "accion": "finalizar_y_deuda",
                             "conductor": nombre_completo_unificado,
                             "comision": comision_nueva,
                             "km": round(distancia, 2)
                         })
-                        
                         if res == "Ok":
                             st.success(f"✅ Viaje Finalizado. Comisión de ${comision_nueva} cargada.")
                             st.balloons()
@@ -373,7 +333,6 @@ if st.session_state.usuario_activo:
                             st.error("❌ Error de conexión con el servidor.")
                     except Exception as e:
                         st.error(f"❌ Error técnico: {e}") 
-
         else:
             if deuda_actual >= 10.00:
                 st.error(f"🚫 CUENTA BLOQUEADA: Tu deuda (${deuda_actual:.2f}) supera el límite de $10.00")
@@ -381,7 +340,6 @@ if st.session_state.usuario_activo:
             else:
                 if "OCUPADO" in estado_actual:
                     st.info("Estás en estado OCUPADO (Sin pasajero de App).")
-
                 col_lib, col_ocu = st.columns(2)
                 with col_lib:
                     if st.button("🟢 PONERME LIBRE", use_container_width=True):
@@ -411,7 +369,7 @@ if st.session_state.usuario_activo:
         st.rerun()
     st.stop()
 else:
-    # --- PANTALLA INICIAL: LOGIN Y REGISTRO ---
+    # --- LOGIN / REGISTRO ---
     tab_log, tab_reg = st.tabs(["🔐 INGRESAR", "📝 REGISTRARME"])
     
     with tab_log:
@@ -419,13 +377,11 @@ else:
         l_nom = st.text_input("Nombre registrado")
         l_ape = st.text_input("Apellido registrado")
         l_pass = st.text_input("Contraseña", type="password")
-        
         if st.button("ENTRAR AL PANEL", type="primary"):
             df = cargar_datos("CHOFERES")
             match = df[(df['Nombre'].astype(str).str.upper() == l_nom.upper()) & 
                        (df['Apellido'].astype(str).str.upper() == l_ape.upper()) & 
                        (df['Clave'].astype(str) == l_pass)]
-            
             if not match.empty:
                 st.session_state.usuario_activo = True
                 st.session_state.datos_usuario = match.iloc[0].to_dict()
@@ -436,7 +392,6 @@ else:
     with st.expander("¿Olvidaste tu contraseña?"):
         st.info("Ingresa tu correo registrado para recibir tu clave:")
         email_recup = st.text_input("Tu Email", key="email_recup")
-        
         if st.button("📧 Recuperar Clave"):
             if "@" in email_recup:
                 with st.spinner("Conectando con el sistema..."):
@@ -470,21 +425,17 @@ else:
                 r_telf = st.text_input("WhatsApp (Sin código) *")
                 r_veh = st.selectbox("Tipo de Vehículo *", VEHICULOS)
                 r_idioma = st.selectbox("Idioma", IDIOMAS)
-    
             r_dir = st.text_input("Dirección *")
             r_pla = st.text_input("Placa *")
             r_pass1 = st.text_input("Contraseña *", type="password")
             
-            # --- SECCIÓN DE FOTO ---
             st.write("---")
             st.write("📷 **Foto de Perfil** (Opcional)")
             archivo_foto_reg = st.file_uploader("Sube tu foto", type=["jpg", "png", "jpeg"])
             
-            # --- BOTÓN DE REGISTRO DIRECTO A EXCEL (SOLUCIÓN DEFINITIVA) ---
+            # --- GUARDAR EN PESTAÑA 'CHOFERES' ---
             if st.form_submit_button("✅ COMPLETAR REGISTRO"):
                 if r_nom and r_email and r_pass1:
-                    
-                    # 1. PROCESAR FOTO
                     foto_para_guardar = "SIN_FOTO"
                     if archivo_foto_reg is not None:
                         try:
@@ -496,17 +447,15 @@ else:
                         except Exception as e:
                             st.error(f"Error procesando imagen: {e}")
 
-                    # 2. GUARDAR EN EXCEL (CONEXIÓN POR ID - INFALIBLE)
                     try:
                         with st.spinner("Conectando con Excel..."):
-                            # AQUÍ ESTÁ LA MAGIA: Conectamos por ID, no por nombre
                             sh = client.open_by_key(SHEET_ID)
-                            
-                            # Usamos la primera hoja visible (índice 0)
-                            wks = sh.get_worksheet(0)
+                            # AQUÍ ESTÁ EL CAMBIO IMPORTANTE:
+                            # Buscamos la hoja por nombre exacto "CHOFERES"
+                            wks = sh.worksheet("CHOFERES")
 
                             nueva_fila = [
-                                datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # Fecha
+                                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 r_nom,
                                 r_ape,
                                 r_ced,
@@ -514,15 +463,13 @@ else:
                                 r_dir,
                                 r_telf,
                                 r_pla,
-                                "LIBRE",        # Estado
-                                "",             # Vence
-                                r_pass1,        # Clave
+                                "LIBRE",
+                                "",
+                                r_pass1,
                                 foto_para_guardar,
-                                "NO"            # Validado
+                                "NO"
                             ]
-
                             wks.append_row(nueva_fila)
-                            
                             st.success("✅ ¡Registro Exitoso! Ya puedes ingresar desde la pestaña superior.")
                             st.balloons()
                             
@@ -532,12 +479,9 @@ else:
                     st.warning("Por favor, completa los campos obligatorios (*)")
 
 st.markdown('<div style="text-align:center; color:#888; font-size:12px; margin-top:50px;">© 2025 Taxi Seguro Global</div>', unsafe_allow_html=True)
-
-# El Radar: Solo se activa si hay un usuario logueado y está LIBRE
 if st.session_state.get('usuario_activo', False):
     datos = st.session_state.get('datos_usuario', {})
     estado_chofer = datos.get('estado', 'OCUPADO')
-    
     if "LIBRE" in str(estado_chofer):
         time.sleep(15) 
         st.rerun()
