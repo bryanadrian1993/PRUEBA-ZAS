@@ -496,12 +496,13 @@ else:
                         except Exception as e:
                             st.error(f"Error procesando imagen: {e}")
 
-                    # 2. GUARDAR EN EXCEL (USANDO LA PRIMERA HOJA DISPONIBLE)
+                    # 2. GUARDAR EN EXCEL (CONEXIÓN POR ID - INFALIBLE)
                     try:
-                        with st.spinner("Registrando conductor..."):
-                            sh = client.open("BD_TAXI_PRUEBAS")
+                        with st.spinner("Conectando con Excel..."):
+                            # AQUÍ ESTÁ LA MAGIA: Conectamos por ID, no por nombre
+                            sh = client.open_by_key(SHEET_ID)
                             
-                            # SOLUCIÓN: Usamos la hoja índice 0 (la primera), sin importar el nombre
+                            # Usamos la primera hoja visible (índice 0)
                             wks = sh.get_worksheet(0)
 
                             nueva_fila = [
