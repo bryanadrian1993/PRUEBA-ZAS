@@ -1,21 +1,4 @@
 import streamlit as st
-
-# --- CÓDIGO DETECTIVE DE LLAVES ---
-st.title("🔑 MODO CERRAJERO")
-
-try:
-    # Esto nos dirá el nombre real de tu "caja fuerte"
-    nombres = list(st.secrets.keys())
-    st.info(f"👉 EL NOMBRE CORRECTO ES: {nombres}")
-    
-    if not nombres:
-        st.error("⚠️ Tu archivo de secretos está vacío o no se lee.")
-        
-except Exception as e:
-    st.error(f"Error: {e}")
-
-st.stop() 
-# --- FIN ---
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
