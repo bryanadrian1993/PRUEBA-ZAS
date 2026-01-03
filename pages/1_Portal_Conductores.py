@@ -273,15 +273,59 @@ if st.session_state.usuario_activo:
                 ''', unsafe_allow_html=True)
 
             with tab_paypal:
-                st.write("**Pagar con saldo/tarjeta:**")
-                st.markdown(f'''
-                    <a href="{LINK_PAYPAL}" target="_blank" style="text-decoration:none;">
-                        <div style="background-color:#0070ba;color:white;padding:12px;text-align:center;border-radius:10px;font-weight:bold;">
-                            🔵 IR A PAYPAL
-                        </div>
-                    </a>
-                ''', unsafe_allow_html=True)
-                st.caption("Nota: PayPal podría aplicar comisiones adicionales.")
+                st.subheader("🌎 Pagar con PayPal")
+                
+                # --- 1. CONFIGURACIÓN DEL MONTO ---
+                # Si debe dinero, sugerimos el total. Si no, $5.00
+                sugerencia = float(deuda_actual) if deuda_actual > 0 else 5.00
+                
+                st.write("Confirma o escribe la cantidad a pagar:")
+                
+                # CASILLA: El conductor puede borrar y poner $1, $5, $10, etc.
+                monto_final = st.number_input("Monto a Pagar ($):", min_value=1.00, value=sugerencia, step=1.00)
+                
+                # Datos para PayPal
+                cedula_usuario = str(fila_actual.iloc[0, 0]) 
+                client_id = "AS96Gq4_mueF7i7xjUzx2nEgYSmiS6t69datLVrPMwxDIxboQC00sZf7TBM6KwkRxUL92ys0I-JXXq_y"
+
+                # --- 2. EL BOTÓN OFICIAL (SMART BUTTON) ---
+                paypal_html_tab = f"""
+                <div id="paypal-button-container-tab"></div>
+                <script src="https://www.paypal.com/sdk/js?client-id={client_id}&currency=USD"></script>
+                <script>
+                    paypal.Buttons({{
+                        createOrder: function(data, actions) {{
+                            return actions.order.create({{
+                                purchase_units: [{{
+                                    amount: {{ value: '{monto_final}' }},
+                                    custom_id: '{cedula_usuario}' 
+                                }}]
+                            }});
+                        }},
+                        onApprove: function(data, actions) {{
+                            return actions.order.capture().then(function(details) {{
+                                alert('✅ Pago de ${monto_final} exitoso. Tu cuenta se actualizará en breve.');
+                            }});
+                        }},
+                        onError: function (err) {{
+                            console.error('Error:', err);
+                            alert('❌ No se pudo procesar el pago.');
+                        }}
+                    }}).render('#paypal-button-container-tab');
+                </script>
+                """
+                components.html(paypal_html_tab, height=180)
+                
+                # --- 3. AVISOS DE BLOQUEO (TOPE $10) ---
+                if deuda_actual >= DEUDA_MAXIMA:
+                    # Calculamos cuánto le falta pagar para desbloquearse
+                    minimo_para_desbloqueo = deuda_actual - DEUDA_MAXIMA + 0.01
+                    st.error(f"⚠️ CUENTA BLOQUEADA (Deuda: ${deuda_actual}).")
+                    st.info(f"💡 Para desbloquearte, debes pagar al menos: **${minimo_para_desbloqueo:.2f}**")
+                elif deuda_actual > 0:
+                    st.warning(f"Tienes deuda pendiente, pero aún puedes trabajar (Límite: ${DEUDA_MAXIMA}).")
+                else:
+                    st.success("✅ Estás al día. Puedes recargar saldo a favor.")
         
         st.divider()
         # ---------------------------------------------------
