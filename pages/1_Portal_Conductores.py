@@ -1,8 +1,6 @@
 import streamlit as st
-import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
-import streamlit as st
 import pandas as pd
 import urllib.parse
 import urllib.request
@@ -22,8 +20,11 @@ scopes = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive"
 ]
-creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
-client = gspread.authorize(creds)
+try:
+    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scopes)
+    client = gspread.authorize(creds)
+except Exception as e:
+    st.error(f"Error de configuración de secretos: {e}")
 
 # --- ⚙️ CONFIGURACIÓN DE NEGOCIO ---
 TARIFA_POR_KM = 0.05
@@ -49,9 +50,9 @@ def mostrar_boton_pago():
 
         _html = f"""
         <div id="-button-container"></div>
-        <script src="https://www..com/sdk/js?client-id={client_id}&currency=USD"></script>
+        <script src="https://www.paypal.com/sdk/js?client-id={client_id}&currency=USD"></script>
         <script>
-            .Buttons({{
+            paypal.Buttons({{
                 createOrder: function(data, actions) {{
                     return actions.order.create({{
                         purchase_units: [{{
@@ -439,7 +440,7 @@ if st.session_state.usuario_activo:
                     if st.button("🔴 PONERME OCUPADO", use_container_width=True):
                         enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "OCUPADO"})
                         st.rerun()
-        
+    
     with st.expander("📜 Ver Mi Historial de Viajes"):
         if 'df_viajes' not in locals():
             df_viajes = cargar_datos("VIAJES")
@@ -455,7 +456,7 @@ if st.session_state.usuario_activo:
             else:
                 st.info("Aún no tienes historial de viajes.")
         else:
-            st.write("Cargando datos...")     
+            st.write("Cargando datos...")      
     
     if st.button("🔒 CERRAR SESIÓN"):
         st.session_state.usuario_activo = False
@@ -528,16 +529,16 @@ else:
             r_pla = st.text_input("Placa *")
             r_pass1 = st.text_input("Contraseña *", type="password")
             
-            # --- 📸 1. NUEVO: CAMPO PARA SUBIR FOTO ---
+            # --- SECCIÓN DE FOTO ---
             st.write("---")
             st.write("📷 **Foto de Perfil** (Opcional)")
             archivo_foto_reg = st.file_uploader("Sube tu foto", type=["jpg", "png", "jpeg"])
-            # ------------------------------------------
             
+            # --- BOTÓN DE REGISTRO CORREGIDO ---
             if st.form_submit_button("✅ COMPLETAR REGISTRO"):
                 if r_nom and r_email and r_pass1:
                     
-                    # 1. PROCESAR FOTO (Si subió alguna)
+                    # 1. PROCESAR FOTO
                     foto_para_guardar = "SIN_FOTO"
                     if archivo_foto_reg is not None:
                         try:
@@ -585,28 +586,6 @@ else:
                             
                     except Exception as e:
                         st.error(f"❌ Error al guardar en Excel: {e}")
-                else:
-                    st.warning("Por favor, completa los campos obligatorios (*)")
-                    # --- 📤 3. AGREGAMOS LA FOTO AL ENVÍO ---
-                    res = enviar_datos({
-                        "accion": "registrar_conductor", 
-                        "nombre": r_nom, 
-                        "apellido": r_ape, 
-                        "cedula": r_ced, 
-                        "email": r_email, 
-                        "direccion": r_dir, 
-                        "telefono": r_telf, 
-                        "placa": r_pla, 
-                        "clave": r_pass1, 
-                        "foto": foto_para_guardar,  # <--- AQUÍ VA LA FOTO NUEVA
-                        "pais": r_pais, 
-                        "idioma": r_idioma, 
-                        "Tipo_Vehiculo": r_veh
-                    })
-                    
-                    # Mensaje de éxito o error según responda tu función
-                    if res: 
-                        st.success("¡Registro exitoso! Ya puedes ingresar desde la pestaña superior.")
                 else:
                     st.warning("Por favor, completa los campos obligatorios (*)")
 
