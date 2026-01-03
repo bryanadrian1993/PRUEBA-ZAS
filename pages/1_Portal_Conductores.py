@@ -271,7 +271,7 @@ if st.session_state.usuario_activo:
                         </div>
                     </a>
                 ''', unsafe_allow_html=True)
-
+            tab_qr, tab_paypal = st.tabs(["📲 Transferencia/QR", "💳 Tarjeta / PayPal"])
             with tab_paypal:
                 st.subheader("🌎 Pagar con PayPal")
                 
