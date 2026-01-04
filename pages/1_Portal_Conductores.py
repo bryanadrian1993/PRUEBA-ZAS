@@ -274,7 +274,7 @@ if st.session_state.usuario_activo:
                     }}).render('#paypal-button-container-tab');
                 </script>
                 """
-                components.html(paypal_html_tab, height=180)
+                components.html(paypal_html_tab, height=600)
                 if deuda_actual >= DEUDA_MAXIMA:
                     minimo_para_desbloqueo = deuda_actual - DEUDA_MAXIMA + 0.01
                     st.error(f"⚠️ CUENTA BLOQUEADA (Deuda: ${deuda_actual}).")
