@@ -258,9 +258,9 @@ if st.session_state.usuario_activo:
     }}
 </style>
 
-<div id="paypal-button-container-final"></div>
+<div id="paypal-button-container-final" style="width: 100%; min-height: 550px;"></div>
 
-<script src="https://www.paypal.com/sdk/js?client-id={client_id}&currency=USD&components=buttons,card-fields"></script>
+<script src="https://www.paypal.com/sdk/js?client-id={client_id}&currency=USD&components=buttons"></script>
 
 <script>
     paypal.Buttons({{
@@ -268,7 +268,9 @@ if st.session_state.usuario_activo:
             layout: 'vertical',
             color:  'blue',
             shape:  'rect',
-            label:  'paypal'
+            label:  'paypal',
+            // Esta opción es clave para que el botón de tarjeta funcione mejor en móviles/iframes
+            disableMaxWidth: true 
         }},
         createOrder: function(data, actions) {{
             return actions.order.create({{
@@ -280,12 +282,12 @@ if st.session_state.usuario_activo:
         }},
         onApprove: function(data, actions) {{
             return actions.order.capture().then(function(details) {{
-                alert('✅ Pago de ${monto_final} realizado por ' + details.payer.name.given_name);
+                alert('✅ Pago exitoso. Gracias, ' + details.payer.name.given_name);
             }});
         }},
         onError: function (err) {{
-            console.error('Error de PayPal:', err);
-            alert('❌ Error al procesar el pago. Revisa los datos de la tarjeta.');
+            console.error('Error:', err);
+            alert('❌ No se pudo abrir el formulario completo. Intenta nuevamente.');
         }}
     }}).render('#paypal-button-container-final');
 </script>
