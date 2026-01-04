@@ -37,6 +37,12 @@ LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO"
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
 
+# --- 🔄 INICIALIZAR SESIÓN (CORREGIDO PARA EVITAR ATTRIBUTE ERROR) ---
+if 'usuario_activo' not in st.session_state:
+    st.session_state['usuario_activo'] = False
+if 'datos_usuario' not in st.session_state:
+    st.session_state['datos_usuario'] = {}
+
 # --- FUNCIÓN DE PAGO PAYPAL ---
 def mostrar_boton_pago(monto_deuda):
     st.header("🔓 Desbloqueo Automático (PayPal)")
@@ -113,11 +119,14 @@ def actualizar_gps_excel(conductor, lat, lon):
         nombre_limpio = conductor.strip().upper()
         
         try:
+            # gspread usa base 1 para filas
             fila = conductores.index(nombre_limpio) + 1
+            # Actualizamos celdas (Col 2=Lat, 3=Lon, 4=Fecha)
             wks.update_cell(fila, 2, lat)
             wks.update_cell(fila, 3, lon)
             wks.update_cell(fila, 4, ahora)
         except ValueError:
+            # Si no está en la lista, lo agregamos
             wks.append_row([nombre_limpio, lat, lon, ahora])
             
         return True, "OK"
@@ -154,20 +163,24 @@ def cargar_datos(hoja):
     except Exception as e:
         return pd.DataFrame()
 
-# --- 🛰️ CAPTURA GPS (MEJORADA) ---
-# Usamos una key específica para evitar que se reinicie constantemente
-loc = get_geolocation(component_key='gps_locator')
-
+# --- 🛰️ CAPTURA GPS ---
+loc = get_geolocation()
 if loc and 'coords' in loc:
     lat_actual = loc['coords']['latitude']
     lon_actual = loc['coords']['longitude']
 else:
     lat_actual, lon_actual = None, None
 
+# --- 📋 LISTAS ---
+PAISES = ["Ecuador", "Colombia", "Perú", "México", "España", "Otro"]
+IDIOMAS = ["Español", "English"]
+VEHICULOS = ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔", "Moto Entrega 🏍️"]
+
 # --- 📱 INTERFAZ ---
 st.title("🚖 Portal de Socios")
 
-if st.session_state.usuario_activo:
+# --- USO SEGURO DE SESSION STATE ---
+if st.session_state.get('usuario_activo', False):
     # --- PANEL CHOFER ---
     df_fresh = cargar_datos("CHOFERES")
     
@@ -226,23 +239,18 @@ if st.session_state.usuario_activo:
                         st.rerun()
     st.write("---") 
 
-    # --- SECCIÓN GPS (ESCRITURA DIRECTA) ---
+    # --- SECCIÓN GPS ---
     gps_activo = st.checkbox("🛰️ RASTREO GPS ACTIVO", value=True)
-    
     if gps_activo:
         if lat_actual and lon_actual:
-            # Si tenemos coordenadas, intentamos escribir
+            # Escribe directo en Excel
             exito, mensaje = actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
             if exito:
-                st.success(f"✅ GPS Conectado: {lat_actual:.4f}, {lon_actual:.4f} (Guardado en Nube)")
+                st.success(f"✅ GPS Conectado: {lat_actual:.4f}, {lon_actual:.4f} (Enviado a Excel)")
             else:
-                st.error(f"❌ GPS Detectado pero error al guardar: {mensaje}")
+                st.error(f"❌ Error guardando en Excel: {mensaje}")
         else:
-            # Si NO hay coordenadas, mostramos advertencia y botón de recarga
-            st.warning("⏳ Buscando señal GPS... Por favor espera.")
-            st.info("💡 Si este mensaje no desaparece en 5 segundos, asegúrate de haber permitido la ubicación en tu navegador.")
-            if st.button("🔄 Refrescar GPS"):
-                st.rerun()
+            st.warning("⏳ Buscando señal GPS... (Asegúrate de permitir la ubicación)")
     else:
         st.info("Activa el check para ser visible.")
 
@@ -452,8 +460,9 @@ else:
         l_pass = st.text_input("Contraseña", type="password")
         if st.button("ENTRAR AL PANEL", type="primary"):
             df = cargar_datos("CHOFERES")
+            # Validación robusta
             if df.empty or 'Nombre' not in df.columns:
-                st.error("❌ Error de conexión con la base de datos.")
+                st.error("❌ No se pudo conectar con la base de datos 'CHOFERES'. Revisa que la hoja exista y tenga los encabezados correctos.")
             else:
                 match = df[
                     (df['Nombre'].astype(str).str.strip().str.upper() == l_nom.strip().upper()) & 
@@ -465,7 +474,29 @@ else:
                     st.session_state.datos_usuario = match.iloc[0].to_dict()
                     st.rerun()
                 else:
-                    st.error("❌ Datos incorrectos.")
+                    st.error("❌ Datos incorrectos o usuario no encontrado.")
+    st.markdown("---") 
+    with st.expander("¿Olvidaste tu contraseña?"):
+        st.info("Ingresa tu correo registrado para recibir tu clave:")
+        email_recup = st.text_input("Tu Email", key="email_recup")
+        if st.button("📧 Recuperar Clave"):
+            if "@" in email_recup:
+                with st.spinner("Conectando con el sistema..."):
+                    try:
+                        resp = requests.post(URL_SCRIPT, params={
+                            "accion": "recuperar_clave",
+                            "email": email_recup
+                        })
+                        if "CORREO_ENVIADO" in resp.text:
+                            st.success("✅ ¡Enviado! Revisa tu correo.")
+                        elif "EMAIL_NO_ENCONTRADO" in resp.text:
+                            st.error("❌ Ese correo no está registrado como socio.")
+                        else:
+                            st.error("Error de conexión.")
+                    except:
+                        st.error("Error al conectar con el servidor.")
+            else:
+                st.warning("Escribe un correo válido.")
     
     with tab_reg:
         with st.form("registro_form"):
@@ -499,26 +530,43 @@ else:
                             buffered = io.BytesIO()
                             img.save(buffered, format="JPEG", quality=70)
                             foto_para_guardar = base64.b64encode(buffered.getvalue()).decode()
-                        except: pass
+                        except Exception as e:
+                            st.error(f"Error procesando imagen: {e}")
 
                     try:
                         with st.spinner("Conectando con Excel..."):
                             sh = client.open_by_key(SHEET_ID)
                             wks = sh.worksheet("CHOFERES")
+                            # --- SE GUARDA COMO VALIDADO "SI" AUTOMÁTICAMENTE ---
+                            # Y SE AJUSTA AL ORDEN EXACTO DE TU IMAGEN e568bc
                             nueva_fila = [
-                                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                r_nom, r_ape, r_ced, r_email, r_dir, r_telf, r_pla,
-                                "LIBRE", "", r_pass1, foto_para_guardar, "SI",
-                                r_pais, r_idioma, r_veh, 0, 0.00
+                                datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # A: Fecha
+                                r_nom, # B: Nombre
+                                r_ape, # C: Apellido
+                                r_ced, # D: Cedula
+                                r_email, # E: Email
+                                r_dir, # F: Direccion
+                                r_telf, # G: Telefono
+                                r_pla, # H: Placa
+                                "LIBRE", # I: Estado
+                                "", # J: Vence
+                                r_pass1, # K: Clave
+                                foto_para_guardar, # L: Foto
+                                "SI", # M: Validado
+                                r_pais, # N: Pais
+                                r_idioma, # O: Idioma
+                                r_veh, # P: Tipo_Vehiculo
+                                0, # Q: KM_ACUMULADOS
+                                0.00 # R: DEUDA
                             ]
                             wks.append_row(nueva_fila)
-                            st.success("✅ ¡Registro Exitoso!")
+                            st.success("✅ ¡Registro Exitoso! Ya puedes ingresar desde la pestaña superior.")
                             st.balloons()
                             
                     except Exception as e:
-                        st.error(f"❌ Error al guardar: {e}")
+                        st.error(f"❌ Error al guardar en Excel: {e}")
                 else:
-                    st.warning("Completa los campos obligatorios (*)")
+                    st.warning("Por favor, completa los campos obligatorios (*)")
 
 st.markdown('<div style="text-align:center; color:#888; font-size:12px; margin-top:50px;">© 2025 Taxi Seguro Global</div>', unsafe_allow_html=True)
 if st.session_state.get('usuario_activo', False):
