@@ -120,16 +120,27 @@ if loc and 'coords' in loc:
 else:
     lat_actual, lon_actual = None, None
 
-# --- 🛠️ FUNCIONES ---
+# --- 🛠️ FUNCIONES (MEJORADA PARA LEER DIRECTO) ---
 def cargar_datos(hoja):
-    GID_CHOFERES = "773119638"
-    GID_VIAJES   = "0"
+    # ESTA ES LA CORRECCIÓN: Leemos directo por nombre de hoja, no por ID ni CSV
+    # Esto evita el KeyError 'Nombre'
     try:
-        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={gid_actual}&cb={time.time()}"
-        df = pd.read_csv(url)
+        sh = client.open_by_key(SHEET_ID)
+        wks = sh.worksheet(hoja)
+        data = wks.get_all_values()
+        if not data:
+            return pd.DataFrame()
+        
+        # La primera fila son los encabezados
+        headers = data[0]
+        rows = data[1:]
+        
+        df = pd.DataFrame(rows, columns=headers)
+        # Limpiamos nombres de columnas por si acaso tienen espacios
         df.columns = df.columns.str.strip()
         return df
     except Exception as e:
+        # st.error(f"Error cargando {hoja}: {e}") # Descomentar para depurar
         return pd.DataFrame()
 
 def enviar_datos(datos):
@@ -153,8 +164,14 @@ st.title("🚖 Portal de Socios")
 if st.session_state.usuario_activo:
     # --- PANEL CHOFER ---
     df_fresh = cargar_datos("CHOFERES")
-    user_nom = str(st.session_state.datos_usuario['Nombre']).strip()
-    user_ape = str(st.session_state.datos_usuario['Apellido']).strip()
+    
+    # Verificación de seguridad por si la carga falló
+    if df_fresh.empty or 'Nombre' not in df_fresh.columns:
+        st.error("⚠️ Error de conexión con la base de datos. Intenta recargar la página.")
+        st.stop()
+
+    user_nom = str(st.session_state.datos_usuario.get('Nombre', '')).strip()
+    user_ape = str(st.session_state.datos_usuario.get('Apellido', '')).strip()
     nombre_completo_unificado = f"{user_nom} {user_ape}".upper()
     
     # Filtramos por nombre y apellido
@@ -219,22 +236,27 @@ if st.session_state.usuario_activo:
         st.error("⚠️ EL NAVEGADOR NO ESTÁ DANDO UBICACIÓN. Activa el GPS y recarga la página.")
 
     if not fila_actual.empty:
-        # --- CORRECCIÓN PARA $NAN ---
-        # Leemos la columna R (índice 17) para la Deuda
+        # --- LECTURA SEGURA DE DEUDA ---
         try:
-            if len(fila_actual.columns) > 17:
+            # Buscamos la columna DEUDA por nombre si existe, o por índice R (17)
+            if 'DEUDA' in fila_actual.columns:
+                raw_deuda = fila_actual.iloc[0]['DEUDA']
+            elif len(fila_actual.columns) > 17:
                 raw_deuda = fila_actual.iloc[0, 17]
-                # Si está vacío o es nulo, ponemos 0.0
-                if pd.isna(raw_deuda) or str(raw_deuda).strip() == "":
-                    deuda_actual = 0.0
-                else:
-                    deuda_actual = float(raw_deuda)
             else:
+                raw_deuda = 0.0
+            
+            # Limpieza del valor
+            if pd.isna(raw_deuda) or str(raw_deuda).strip() == "":
                 deuda_actual = 0.0
+            else:
+                # Quitamos símbolos de moneda si existen y convertimos
+                deuda_clean = str(raw_deuda).replace('$', '').replace(',', '')
+                deuda_actual = float(deuda_clean)
         except:
             deuda_actual = 0.0
             
-        estado_actual = str(fila_actual.iloc[0, 8]) 
+        estado_actual = str(fila_actual.iloc[0]['Estado']) if 'Estado' in fila_actual.columns else "OCUPADO"
         
         if deuda_actual >= DEUDA_MAXIMA and "LIBRE" in estado_actual.upper():
             st.error("⚠️ DESCONEXIÓN AUTOMÁTICA: Tu deuda superó el límite permitido.")
@@ -282,7 +304,7 @@ if st.session_state.usuario_activo:
                 sugerencia = float(deuda_actual) if deuda_actual > 0 else 5.00
                 st.write("Confirma o escribe la cantidad a pagar:")
                 monto_final = st.number_input("Monto a Pagar ($):", min_value=1.00, value=sugerencia, step=1.00)
-                cedula_usuario = str(fila_actual.iloc[0, 0]) 
+                cedula_usuario = str(fila_actual.iloc[0]['Cedula']) if 'Cedula' in fila_actual.columns else "0000000000"
                 client_id = "AbTSfP381kOrNXmRJO8SR7IvjtjLx0Qmj1TyERiV5RzVheYAAxvgGWHJam3KE_iyfcrf56VV_k-MPYmv"
                 
                 paypal_html_tab = f"""
@@ -408,10 +430,7 @@ if st.session_state.usuario_activo:
                 col_lib, col_ocu = st.columns(2)
                 with col_lib:
                     if st.button("🟢 PONERME LIBRE", use_container_width=True):
-                        # 1. ENVIAR ESTADO
                         enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "LIBRE"})
-                        
-                        # 2. ENVIAR GPS SI EXISTE
                         if lat_actual and lon_actual:
                             enviar_datos({
                                 "accion": "actualizar_ubicacion",
@@ -455,17 +474,21 @@ else:
         l_pass = st.text_input("Contraseña", type="password")
         if st.button("ENTRAR AL PANEL", type="primary"):
             df = cargar_datos("CHOFERES")
-            match = df[
-                (df['Nombre'].astype(str).str.strip().str.upper() == l_nom.strip().upper()) & 
-                (df['Apellido'].astype(str).str.strip().str.upper() == l_ape.strip().upper()) & 
-                (df['Clave'].astype(str).str.strip() == l_pass.strip())
-            ]
-            if not match.empty:
-                st.session_state.usuario_activo = True
-                st.session_state.datos_usuario = match.iloc[0].to_dict()
-                st.rerun()
+            # Validación robusta
+            if df.empty or 'Nombre' not in df.columns:
+                st.error("❌ No se pudo conectar con la base de datos 'CHOFERES'. Revisa que la hoja exista y tenga los encabezados correctos.")
             else:
-                st.error("❌ Datos incorrectos o usuario no encontrado.")
+                match = df[
+                    (df['Nombre'].astype(str).str.strip().str.upper() == l_nom.strip().upper()) & 
+                    (df['Apellido'].astype(str).str.strip().str.upper() == l_ape.strip().upper()) & 
+                    (df['Clave'].astype(str).str.strip() == l_pass.strip())
+                ]
+                if not match.empty:
+                    st.session_state.usuario_activo = True
+                    st.session_state.datos_usuario = match.iloc[0].to_dict()
+                    st.rerun()
+                else:
+                    st.error("❌ Datos incorrectos o usuario no encontrado.")
     st.markdown("---") 
     with st.expander("¿Olvidaste tu contraseña?"):
         st.info("Ingresa tu correo registrado para recibir tu clave:")
@@ -528,7 +551,8 @@ else:
                         with st.spinner("Conectando con Excel..."):
                             sh = client.open_by_key(SHEET_ID)
                             wks = sh.worksheet("CHOFERES")
-                            # --- CORREGIDO: SE AJUSTA EXACTAMENTE A TU EXCEL ACTUAL ---
+                            # --- SE GUARDA COMO VALIDADO "SI" AUTOMÁTICAMENTE ---
+                            # Y SE AJUSTA AL ORDEN EXACTO DE TU IMAGEN e568bc
                             nueva_fila = [
                                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # A: Fecha
                                 r_nom, # B: Nombre
@@ -543,7 +567,7 @@ else:
                                 r_pass1, # K: Clave
                                 foto_para_guardar, # L: Foto
                                 "SI", # M: Validado
-                                r_pais, # N: Pais (ANTES ERA LATITUD, AHORA CORREGIDO)
+                                r_pais, # N: Pais
                                 r_idioma, # O: Idioma
                                 r_veh, # P: Tipo_Vehiculo
                                 0, # Q: KM_ACUMULADOS
