@@ -103,16 +103,14 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
 
     if libres.empty: return None, None, None, "S/P"
 
-    # 5. Buscar el más cercano
+    # 5. Buscar el más cercano (SIN FILTRO DE DISTANCIA MÁXIMA)
     mejor_chofer = None
     menor_distancia = float('inf')
 
     # Preparar datos de ubicación para búsqueda rápida
-    # Asumimos que UBICACIONES tiene col 'Conductor'
     if 'Conductor' in df_u.columns:
         df_u['Conductor_Clean'] = df_u['Conductor'].astype(str).str.strip().str.upper()
     else:
-        # Intenta buscar la columna si tiene otro nombre (ej: CONDUCTOR)
         cols_posibles = [c for c in df_u.columns if "CONDUCTOR" in c.upper()]
         if cols_posibles:
             df_u['Conductor_Clean'] = df_u[cols_posibles[0]].astype(str).str.strip().str.upper()
@@ -120,18 +118,14 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
             return None, None, None, "Error Ubi Cols"
 
     for _, conductor in libres.iterrows():
-        # Construir nombre completo del conductor de la hoja CHOFERES
         nom = str(conductor.get('NOMBRE', '')).strip()
         ape = str(conductor.get('APELLIDO', '')).strip()
         nombre_completo = f"{nom} {ape}".strip().upper()
 
-        # Buscar este nombre en UBICACIONES
-        # Tomamos el último registro (iloc[-1])
         ubi_match = df_u[df_u['Conductor_Clean'] == nombre_completo]
         
         if not ubi_match.empty:
             try:
-                # Intenta leer Latitud/Longitud (Ajusta nombres si tu Excel es diferente)
                 lat_idx = [c for c in ubi_match.columns if "LAT" in c.upper()][0]
                 lon_idx = [c for c in ubi_match.columns if "LON" in c.upper()][0]
                 
@@ -140,8 +134,9 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
                 
                 dist = calcular_distancia_real(lat_cli, lon_cli, lat_cond, lon_cond)
                 
-                # Radio máximo de búsqueda (ej. 10km)
-                if dist < 10 and dist < menor_distancia:
+                # --- MODIFICACIÓN CLAVE: ELIMINADO EL FILTRO DE 10KM ---
+                # Ahora simplemente buscamos quién tiene la menor distancia matemática.
+                if dist < menor_distancia:
                     menor_distancia = dist
                     mejor_chofer = conductor
             except:
@@ -176,7 +171,7 @@ if not st.session_state.viaje_confirmado:
         enviar = st.form_submit_button("🚖 SOLICITAR UNIDAD")
 
     if enviar and nombre_cli and ref_cli:
-        with st.spinner("🔄 Buscando unidad cercana..."):
+        with st.spinner("🔄 Buscando unidad más cercana..."):
             chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
             
             if chof is not None:
@@ -222,7 +217,7 @@ if not st.session_state.viaje_confirmado:
                 else:
                     st.error(f"❌ Error al registrar pedido: {res_pedido}")
             else:
-                 st.warning("⚠️ No hay conductores disponibles cerca de tu ubicación en este momento.")
+                 st.warning("⚠️ No hay conductores disponibles (Revisa que haya conductores LIBRES).")
 
 if st.session_state.viaje_confirmado:
     dp = st.session_state.datos_pedido
