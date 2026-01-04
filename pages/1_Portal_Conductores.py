@@ -9,15 +9,21 @@ import math
 import os
 import time
 import io
-import re  # <--- IMPORTANTE: Librería para leer el mapa correctamente
+import re
 from PIL import Image
 from datetime import datetime
 from streamlit_js_eval import get_geolocation
+from streamlit_autorefresh import st_autorefresh # <--- AGREGADO: LIBRERÍA VITAL
 import requests
 import streamlit.components.v1 as components
 
 # --- 🔗 CONFIGURACIÓN TÉCNICA ---
 st.set_page_config(page_title="Portal Conductores", page_icon="🚖", layout="centered")
+
+# --- 🔄 AUTO-REFRESCO (EL CORAZÓN DEL GPS) ---
+# Esto hace que la app se actualice cada 10 segundos para enviar coordenadas nuevas
+if st.session_state.get('usuario_activo', False):
+    st_autorefresh(interval=10000, key="gps_alive")
 
 # --- 🔌 CONEXIÓN SEGURA A GOOGLE SHEETS ---
 scopes = [
@@ -113,9 +119,9 @@ PAISES = ["Ecuador", "Colombia", "Perú", "México", "España", "Otro"]
 IDIOMAS = ["Español", "English"]
 VEHICULOS = ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔", "Moto Entrega 🏍️"]
 
-# --- 🛰️ CAPTURA GPS ESTRICTA (Sin coordenadas falsas) ---
+# --- 🛰️ CAPTURA GPS ESTRICTA ---
 loc = get_geolocation()
-lat_actual, lon_actual = None, None # Se inicia vacio
+lat_actual, lon_actual = None, None
 
 if loc and 'coords' in loc:
     lat_actual = loc['coords']['latitude']
@@ -143,13 +149,6 @@ def enviar_datos(datos):
         with urllib.request.urlopen(url_final) as response:
             return response.read().decode('utf-8')
     except Exception as e: return f"Error: {e}"
-
-def enviar_datos_a_sheets(datos):
-    try:
-        params = urllib.parse.urlencode(datos)
-        with urllib.request.urlopen(f"{URL_SCRIPT}?{params}") as response:
-            return response.read().decode('utf-8')
-    except: return "Error"
 
 def actualizar_gps_excel(conductor, lat, lon):
     try:
@@ -239,10 +238,11 @@ if st.session_state.usuario_activo:
     gps_activo = st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True)
     if gps_activo:
         if lat_actual and lon_actual:
-            # Solo si hay coordenadas reales
+            # Solo actualizamos si hay coordenadas REALES
             res_gps = actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
             if res_gps:
-                st.success(f"📍 GPS Transmitiendo... ({lat_actual:.5f}, {lon_actual:.5f})")
+                hora = datetime.now().strftime("%H:%M:%S")
+                st.success(f"📡 SEÑAL EN VIVO ({hora})\n📍 Lat: {lat_actual:.5f}, Lon: {lon_actual:.5f}")
         else:
             # Si no hay, no se inventa nada
             st.warning("⏳ Buscando señal satelital... (No se enviará ubicación hasta conectar)")
@@ -251,7 +251,6 @@ if st.session_state.usuario_activo:
 
     if not fila_actual.empty:
         try:
-            # Lectura segura de deuda
             raw_deuda = str(fila_actual.iloc[0].get('DEUDA', 0)).replace('$','').replace(',','')
             deuda_actual = float(raw_deuda) if raw_deuda else 0.0
         except:
@@ -370,9 +369,6 @@ if st.session_state.usuario_activo:
                         link_mapa = str(datos_v.get('Mapa', ''))
                         distancia = 2.0
                         
-                        # --- AQUÍ ESTÁ EL ARREGLO DE LOS $7.43 ---
-                        # Usamos REGEX para leer las coordenadas matemáticas exactas
-                        # Esto evita que se borre el signo negativo o se confundan los ceros
                         try:
                             numeros = re.findall(r'-?\d+\.\d+', link_mapa)
                             if len(numeros) >= 2:
@@ -390,7 +386,7 @@ if st.session_state.usuario_activo:
                         if distancia < 1.0: distancia = 1.0
                         comision_nueva = round(distancia * TARIFA_POR_KM, 2)
                         
-                        res = enviar_datos_a_sheets({
+                        res = enviar_datos({
                             "accion": "finalizar_y_deuda",
                             "conductor": nombre_completo_unificado,
                             "comision": comision_nueva,
@@ -457,7 +453,7 @@ else:
             df = cargar_datos("CHOFERES")
             # Validación robusta de columnas
             if df.empty or 'Nombre' not in df.columns:
-                st.error("❌ No se pudo conectar con la base de datos 'CHOFERES'. Revisa que la hoja exista y tenga los encabezados correctos.")
+                st.error("❌ No se pudo conectar con la base de datos.")
             else:
                 match = df[
                     (df['Nombre'].astype(str).str.strip().str.upper() == l_nom.strip().upper()) & 
@@ -532,8 +528,6 @@ else:
                         with st.spinner("Conectando con Excel..."):
                             sh = client.open_by_key(SHEET_ID)
                             wks = sh.worksheet("CHOFERES")
-                            # --- SE GUARDA COMO VALIDADO "SI" AUTOMÁTICAMENTE ---
-                            # --- SOLUCIÓN DE POSICIONAMIENTO DE COLUMNAS ---
                             nueva_fila = [
                                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # A: Fecha
                                 r_nom, # B: Nombre
@@ -550,7 +544,7 @@ else:
                                 "SI", # M: Validado
                                 r_pais, # N: Pais
                                 r_idioma, # O: Idioma
-                                r_veh, # P: Tipo_Vehiculo <--- ¡AQUÍ ESTABA FALTANDO!
+                                r_veh, # P: Tipo_Vehiculo
                                 0, # Q: KM_ACUMULADOS
                                 0.00 # R: DEUDA
                             ]
