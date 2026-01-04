@@ -9,6 +9,7 @@ import math
 import os
 import time
 import io
+import re  # <--- IMPORTANTE: Agregamos librería para leer bien el mapa
 from PIL import Image
 from datetime import datetime
 from streamlit_js_eval import get_geolocation
@@ -143,15 +144,6 @@ def enviar_datos(datos):
             return response.read().decode('utf-8')
     except Exception as e: return f"Error: {e}"
 
-def enviar_datos_a_sheets(datos):
-    try:
-        params = urllib.parse.urlencode(datos)
-        with urllib.request.urlopen(f"{URL_SCRIPT}?{params}") as response:
-            return response.read().decode('utf-8')
-    except: return "Error"
-
-# --- 🛠️ AGREGAMOS AQUÍ LA FUNCIÓN PARA ACTUALIZAR GPS DIRECTO EN EXCEL ---
-# Esto es vital para que funcione el rastreo en tiempo real
 def actualizar_gps_excel(conductor, lat, lon):
     try:
         sh = client.open_by_key(SHEET_ID)
@@ -239,7 +231,6 @@ if st.session_state.usuario_activo:
 
     gps_activo = st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True)
     if gps_activo and lat_actual and lon_actual:
-        # AQUÍ USAMOS LA FUNCIÓN DE ESCRITURA DIRECTA
         res_gps = actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
         if res_gps:
             st.success(f"📍 GPS Transmitiendo... ({lat_actual:.4f}, {lon_actual:.4f})")
@@ -248,7 +239,6 @@ if st.session_state.usuario_activo:
 
     if not fila_actual.empty:
         try:
-            # Lectura segura de deuda
             raw_deuda = str(fila_actual.iloc[0].get('DEUDA', 0)).replace('$','').replace(',','')
             deuda_actual = float(raw_deuda) if raw_deuda else 0.0
         except:
@@ -361,24 +351,35 @@ if st.session_state.usuario_activo:
             st.write(f"📞 **Tel:** {datos_v.get('Tel Cliente', 'S/D')}")
             st.write(f"📍 **Destino:** {datos_v.get('Referencia', 'S/D')}")
             st.markdown(f"[🗺️ Ver Mapa]({datos_v.get('Mapa', '#')})")
+            
             if st.button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True):
                 with st.spinner("Calculando distancia y actualizando deuda..."):
                     try:
                         link_mapa = str(datos_v.get('Mapa', ''))
                         distancia = 2.0
-                        if '0' in link_mapa and ',' in link_mapa:
-                            try:
-                                lat_cli = float(link_mapa.split('0')[1].split(',')[0])
-                                lon_cli = float(link_mapa.split('0')[1].split(',')[1])
+                        
+                        # --- CORRECCIÓN DE CÁLCULO DE DISTANCIA (AQUÍ ESTABA EL ERROR DE $7.43) ---
+                        try:
+                            # Usamos Expresiones Regulares para extraer lat/lon limpiamente
+                            # Esto evita que los prefijos del mapa (como '2' o '0') arruinen el número
+                            numeros = re.findall(r'-?\d+\.\d+', link_mapa)
+                            if len(numeros) >= 2:
+                                lat_cli = float(numeros[-2]) # Penúltimo número es Lat
+                                lon_cli = float(numeros[-1]) # Último número es Lon
+                                
                                 dLat = math.radians(lat_actual - lat_cli)
                                 dLon = math.radians(lon_actual - lon_cli)
                                 a = math.sin(dLat/2)**2 + math.cos(math.radians(lat_cli)) * \
                                     math.cos(math.radians(lat_actual)) * math.sin(dLon/2)**2
                                 c = 2 * math.asin(math.sqrt(a))
                                 distancia = 6371 * c 
-                            except: pass
+                        except: 
+                            pass # Si falla, usa distancia 2.0 por defecto
+                        
+                        # Lógica de cobro: Mínimo 1km ($0.05)
                         if distancia < 1.0: distancia = 1.0
                         comision_nueva = round(distancia * TARIFA_POR_KM, 2)
+                        
                         res = enviar_datos_a_sheets({
                             "accion": "finalizar_y_deuda",
                             "conductor": nombre_completo_unificado,
@@ -406,7 +407,6 @@ if st.session_state.usuario_activo:
                     if st.button("🟢 PONERME LIBRE", use_container_width=True):
                         enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "LIBRE"})
                         if lat_actual and lon_actual:
-                            # Forzamos actualización de GPS en Excel
                             actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
                         st.rerun()
                         
@@ -446,7 +446,7 @@ else:
             df = cargar_datos("CHOFERES")
             # Validación robusta de columnas
             if df.empty or 'Nombre' not in df.columns:
-                st.error("❌ No se pudo conectar con la base de datos 'CHOFERES'. Revisa que la hoja exista y tenga los encabezados correctos.")
+                st.error("❌ No se pudo conectar con la base de datos.")
             else:
                 match = df[
                     (df['Nombre'].astype(str).str.strip().str.upper() == l_nom.strip().upper()) & 
@@ -523,26 +523,25 @@ else:
                             wks = sh.worksheet("CHOFERES")
                             # --- SE GUARDA COMO VALIDADO "SI" AUTOMÁTICAMENTE ---
                             # --- SOLUCIÓN DE POSICIONAMIENTO DE COLUMNAS ---
-                            # Columna P (15) es TIPO VEHICULO
                             nueva_fila = [
-                                datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # A: Fecha
-                                r_nom, # B: Nombre
-                                r_ape, # C: Apellido
-                                r_ced, # D: Cedula
-                                r_email, # E: Email
-                                r_dir, # F: Direccion
-                                r_telf, # G: Telefono
-                                r_pla, # H: Placa
-                                "LIBRE", # I: Estado
-                                "", # J: Vence
-                                r_pass1, # K: Clave
-                                foto_para_guardar, # L: Foto
-                                "SI", # M: Validado
-                                r_pais, # N: Pais
-                                r_idioma, # O: Idioma
-                                r_veh, # P: Tipo_Vehiculo <--- ¡AQUÍ ESTABA FALTANDO!
-                                0, # Q: KM_ACUMULADOS
-                                0.00 # R: DEUDA
+                                datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # A
+                                r_nom, # B
+                                r_ape, # C
+                                r_ced, # D
+                                r_email, # E
+                                r_dir, # F
+                                r_telf, # G
+                                r_pla, # H
+                                "LIBRE", # I
+                                "", # J
+                                r_pass1, # K
+                                foto_para_guardar, # L
+                                "SI", # M
+                                r_pais, # N
+                                r_idioma, # O
+                                r_veh, # P
+                                0, # Q
+                                0.00 # R
                             ]
                             wks.append_row(nueva_fila)
                             st.success("✅ ¡Registro Exitoso! Ya puedes ingresar desde la pestaña superior.")
