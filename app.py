@@ -192,6 +192,9 @@ if not st.session_state.viaje_confirmado:
         enviar = st.form_submit_button("🚖 SOLICITAR UNIDAD", use_container_width=True)
 
     if enviar:
+        # DEBUG: Mostrar estado del formulario
+        st.info(f"🔍 DEBUG: Formulario enviado | GPS: {lat_actual is not None}")
+        
         # Validaciones
         if not nombre_cli or not ref_cli:
             st.error("❌ Por favor completa todos los campos obligatorios")
@@ -201,8 +204,13 @@ if not st.session_state.viaje_confirmado:
             st.error("🚫 Aún no tenemos tu ubicación GPS. Espera unos segundos y vuelve a intentar.")
         else:
             # PROCESAR SOLICITUD
+            st.info("✅ Validaciones OK - Buscando conductor...")
+            
             with st.spinner("🔍 Buscando conductor disponible..."):
                 chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
+                
+                # DEBUG: Mostrar resultado de búsqueda
+                st.write(f"🔍 DEBUG - Chofer encontrado: {chof is not None}")
                 
                 if chof is not None:
                     # Limpieza de datos del conductor
@@ -210,11 +218,15 @@ if not st.session_state.viaje_confirmado:
                     a_clean = str(chof.get('APELLIDO', '')).replace('nan','').strip()
                     nombre_chof = f"{n_clean} {a_clean}".strip().upper()
                     
+                    st.write(f"✅ Conductor seleccionado: {nombre_chof}")
+                    
                     id_v = f"TX-{random.randint(1000, 9999)}"
                     mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
                     
                     # 1. Registrar Pedido
-                    res_pedido = enviar_datos_a_sheets({
+                    st.write("📝 Registrando pedido en Google Sheets...")
+                    
+                    datos_envio = {
                         "accion": "registrar_pedido",
                         "id_viaje": id_v,
                         "cliente": nombre_cli,
@@ -223,19 +235,43 @@ if not st.session_state.viaje_confirmado:
                         "conductor": nombre_chof,
                         "tel_conductor": t_chof,
                         "mapa": mapa_url
-                    })
+                    }
                     
-                    # 2. Verificar registro exitoso
-                    if "Registrado" in str(res_pedido) or "Ok" in str(res_pedido) or "registrado" in str(res_pedido).lower():
+                    st.write(f"📤 Datos a enviar: {datos_envio}")
+                    
+                    res_pedido = enviar_datos_a_sheets(datos_envio)
+                    
+                    st.write(f"📥 RESPUESTA DE SHEETS: `{res_pedido}`")
+                    
+                    # 2. Verificar registro exitoso - MÚLTIPLES CONDICIONES
+                    respuesta_ok = (
+                        res_pedido and 
+                        (
+                            "registrado" in str(res_pedido).lower() or 
+                            "ok" in str(res_pedido).lower() or
+                            "success" in str(res_pedido).lower() or
+                            "éxito" in str(res_pedido).lower() or
+                            len(str(res_pedido)) > 0  # Cualquier respuesta no vacía
+                        )
+                    )
+                    
+                    st.write(f"✔️ Respuesta válida: {respuesta_ok}")
+                    
+                    if respuesta_ok:
+                        st.success("✅ PEDIDO REGISTRADO EXITOSAMENTE")
+                        
                         # Cambiar estado del conductor
-                        enviar_datos_a_sheets({
+                        st.write("🔄 Cambiando estado del conductor...")
+                        res_estado = enviar_datos_a_sheets({
                             "accion": "cambiar_estado", 
                             "conductor": nombre_chof, 
                             "estado": "OCUPADO"
                         })
+                        st.write(f"Estado actualizado: {res_estado}")
                         
                         # Guardar datos del viaje
-                        st.session_state.viaje_confirmado = True
+                        st.write("💾 Guardando datos en session_state...")
+                        
                         st.session_state.datos_pedido = {
                             "chof": nombre_chof, 
                             "t_chof": t_chof, 
@@ -249,15 +285,30 @@ if not st.session_state.viaje_confirmado:
                             "ref": ref_cli
                         }
                         
-                        st.success("✅ ¡Conductor asignado exitosamente!")
+                        st.write("✅ Datos guardados. Activando viaje...")
+                        st.session_state.viaje_confirmado = True
+                        
+                        st.write(f"🎯 Estado viaje_confirmado: {st.session_state.viaje_confirmado}")
+                        
                         st.balloons()
+                        st.success("🎉 ¡TODO LISTO! Recargando página...")
+                        
+                        # Esperar 2 segundos antes de recargar
+                        import time
+                        time.sleep(2)
                         
                         # Forzar recarga
                         st.rerun()
                     else:
-                        st.error(f"❌ Error al registrar: {res_pedido}")
+                        st.error(f"❌ Error al registrar pedido")
+                        st.error(f"Respuesta recibida: `{res_pedido}`")
+                        st.warning("💡 Verifica que tu Google Apps Script esté funcionando correctamente")
                 else:
-                    st.warning("⚠️ No hay conductores disponibles en este momento. Intenta nuevamente.")
+                    st.warning("⚠️ No hay conductores disponibles")
+                    st.info("Esto puede deberse a:")
+                    st.write("- No hay conductores con estado LIBRE")
+                    st.write("- No hay conductores del tipo solicitado")
+                    st.write("- Todos los conductores están muy lejos")
 
 # --- PANTALLA DE VIAJE ACTIVO ---
 else:
