@@ -37,7 +37,7 @@ LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO"
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
 
-# --- FUNCIÓN DE PAGO PAYPAL (Visualización Bloqueo) ---
+# --- FUNCIÓN DE PAGO PAYPAL ---
 def mostrar_boton_pago(monto_deuda):
     st.header("🔓 Desbloqueo Automático (PayPal)")
     st.warning(f"Tu deuda es de **${monto_deuda:.2f}**. Debes pagarla completa para desbloquearte.")
@@ -125,8 +125,7 @@ def cargar_datos(hoja):
     GID_CHOFERES = "773119638"
     GID_VIAJES   = "0"
     try:
-        gid_actual = GID_CHOFERES if hoja == "CHOFERES" else GID_VIAJES
-        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={gid_actual}&cache_buster={time.time()}"
+        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={gid_actual}&cb={time.time()}"
         df = pd.read_csv(url)
         df.columns = df.columns.str.strip()
         return df
@@ -158,6 +157,7 @@ if st.session_state.usuario_activo:
     user_ape = str(st.session_state.datos_usuario['Apellido']).strip()
     nombre_completo_unificado = f"{user_nom} {user_ape}".upper()
     
+    # Filtramos por nombre y apellido
     fila_actual = df_fresh[
         (df_fresh['Nombre'].astype(str).str.upper().str.strip() == user_nom.upper()) & 
         (df_fresh['Apellido'].astype(str).str.upper().str.strip() == user_ape.upper())
@@ -208,7 +208,6 @@ if st.session_state.usuario_activo:
     # --- SECCIÓN GPS (Siempre activa) ---
     gps_activo = st.checkbox("🛰️ RASTREO GPS ACTIVO", value=True)
     if gps_activo and lat_actual and lon_actual:
-        # Enviamos ubicación periódicamente para asegurar que Excel se actualice
         res = enviar_datos({
             "accion": "actualizar_ubicacion",
             "conductor": nombre_completo_unificado,
@@ -220,7 +219,21 @@ if st.session_state.usuario_activo:
         st.error("⚠️ EL NAVEGADOR NO ESTÁ DANDO UBICACIÓN. Activa el GPS y recarga la página.")
 
     if not fila_actual.empty:
-        deuda_actual = float(fila_actual.iloc[0, 17])
+        # --- CORRECCIÓN PARA $NAN ---
+        # Leemos la columna R (índice 17) para la Deuda
+        try:
+            if len(fila_actual.columns) > 17:
+                raw_deuda = fila_actual.iloc[0, 17]
+                # Si está vacío o es nulo, ponemos 0.0
+                if pd.isna(raw_deuda) or str(raw_deuda).strip() == "":
+                    deuda_actual = 0.0
+                else:
+                    deuda_actual = float(raw_deuda)
+            else:
+                deuda_actual = 0.0
+        except:
+            deuda_actual = 0.0
+            
         estado_actual = str(fila_actual.iloc[0, 8]) 
         
         if deuda_actual >= DEUDA_MAXIMA and "LIBRE" in estado_actual.upper():
@@ -272,7 +285,6 @@ if st.session_state.usuario_activo:
                 cedula_usuario = str(fila_actual.iloc[0, 0]) 
                 client_id = "AbTSfP381kOrNXmRJO8SR7IvjtjLx0Qmj1TyERiV5RzVheYAAxvgGWHJam3KE_iyfcrf56VV_k-MPYmv"
                 
-                # --- SOLUCIÓN DEFINITIVA PAYPAL ---
                 paypal_html_tab = f"""
                 <!DOCTYPE html>
                 <html>
@@ -395,12 +407,11 @@ if st.session_state.usuario_activo:
                     st.info("Estás en estado OCUPADO (Sin pasajero de App).")
                 col_lib, col_ocu = st.columns(2)
                 with col_lib:
-                    # --- AQUÍ ESTÁ LA MAGIA ---
                     if st.button("🟢 PONERME LIBRE", use_container_width=True):
-                        # 1. ENVIAMOS ESTADO
+                        # 1. ENVIAR ESTADO
                         enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "LIBRE"})
                         
-                        # 2. FORZAMOS EL ENVÍO DE UBICACIÓN SI EXISTE
+                        # 2. ENVIAR GPS SI EXISTE
                         if lat_actual and lon_actual:
                             enviar_datos({
                                 "accion": "actualizar_ubicacion",
@@ -517,21 +528,26 @@ else:
                         with st.spinner("Conectando con Excel..."):
                             sh = client.open_by_key(SHEET_ID)
                             wks = sh.worksheet("CHOFERES")
-                            # --- SE GUARDA COMO VALIDADO (SI) AUTOMÁTICAMENTE ---
+                            # --- CORREGIDO: SE AJUSTA EXACTAMENTE A TU EXCEL ACTUAL ---
                             nueva_fila = [
-                                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                r_nom,
-                                r_ape,
-                                r_ced,
-                                r_email,
-                                r_dir,
-                                r_telf,
-                                r_pla,
-                                "LIBRE",
-                                "",
-                                r_pass1,
-                                foto_para_guardar,
-                                "SI"
+                                datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # A: Fecha
+                                r_nom, # B: Nombre
+                                r_ape, # C: Apellido
+                                r_ced, # D: Cedula
+                                r_email, # E: Email
+                                r_dir, # F: Direccion
+                                r_telf, # G: Telefono
+                                r_pla, # H: Placa
+                                "LIBRE", # I: Estado
+                                "", # J: Vence
+                                r_pass1, # K: Clave
+                                foto_para_guardar, # L: Foto
+                                "SI", # M: Validado
+                                r_pais, # N: Pais (ANTES ERA LATITUD, AHORA CORREGIDO)
+                                r_idioma, # O: Idioma
+                                r_veh, # P: Tipo_Vehiculo
+                                0, # Q: KM_ACUMULADOS
+                                0.00 # R: DEUDA
                             ]
                             wks.append_row(nueva_fila)
                             st.success("✅ ¡Registro Exitoso! Ya puedes ingresar desde la pestaña superior.")
