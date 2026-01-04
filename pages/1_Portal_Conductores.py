@@ -48,7 +48,6 @@ def mostrar_boton_pago(monto_deuda):
         client_id = "AS96Gq4_mueF7i7xjUzx2nEgYSmiS6t69datLVrPMwxDIxboQC00sZf7TBM6KwkRxUL92ys0I-JXXq_y"
         valor_a_pagar = f"{monto_deuda:.2f}"
         
-        # HTML Corregido para móviles y con campos expandidos
         _html = f"""
         <!DOCTYPE html>
         <html>
@@ -206,19 +205,20 @@ if st.session_state.usuario_activo:
                         st.rerun()
     st.write("---") 
 
-    if st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True):
-        if lat_actual and lon_actual:
-            res = enviar_datos({
-                "accion": "actualizar_ubicacion",
-                "conductor": nombre_completo_unificado,
-                "latitud": lat_actual,
-                "longitud": lon_actual
-            })
-            if res:
-                st.success(f"📍 Ubicación activa: {lat_actual}, {lon_actual}")
-        else:
-            st.warning("🛰️ Esperando señal de GPS... Por favor, permite el acceso en tu navegador.")
-    
+    # --- SECCIÓN GPS (Siempre activa) ---
+    gps_activo = st.checkbox("🛰️ RASTREO GPS ACTIVO", value=True)
+    if gps_activo and lat_actual and lon_actual:
+        # Enviamos ubicación periódicamente para asegurar que Excel se actualice
+        res = enviar_datos({
+            "accion": "actualizar_ubicacion",
+            "conductor": nombre_completo_unificado,
+            "latitud": lat_actual,
+            "longitud": lon_actual
+        })
+        st.success(f"📍 GPS Enviando señal... ({lat_actual:.4f}, {lon_actual:.4f})")
+    elif not (lat_actual and lon_actual):
+        st.error("⚠️ EL NAVEGADOR NO ESTÁ DANDO UBICACIÓN. Activa el GPS y recarga la página.")
+
     if not fila_actual.empty:
         deuda_actual = float(fila_actual.iloc[0, 17])
         estado_actual = str(fila_actual.iloc[0, 8]) 
@@ -395,9 +395,21 @@ if st.session_state.usuario_activo:
                     st.info("Estás en estado OCUPADO (Sin pasajero de App).")
                 col_lib, col_ocu = st.columns(2)
                 with col_lib:
+                    # --- AQUÍ ESTÁ LA MAGIA ---
                     if st.button("🟢 PONERME LIBRE", use_container_width=True):
+                        # 1. ENVIAMOS ESTADO
                         enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "LIBRE"})
+                        
+                        # 2. FORZAMOS EL ENVÍO DE UBICACIÓN SI EXISTE
+                        if lat_actual and lon_actual:
+                            enviar_datos({
+                                "accion": "actualizar_ubicacion",
+                                "conductor": nombre_completo_unificado,
+                                "latitud": lat_actual,
+                                "longitud": lon_actual
+                            })
                         st.rerun()
+                        
                 with col_ocu:
                     if st.button("🔴 PONERME OCUPADO", use_container_width=True):
                         enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "OCUPADO"})
@@ -505,6 +517,7 @@ else:
                         with st.spinner("Conectando con Excel..."):
                             sh = client.open_by_key(SHEET_ID)
                             wks = sh.worksheet("CHOFERES")
+                            # --- SE GUARDA COMO VALIDADO (SI) AUTOMÁTICAMENTE ---
                             nueva_fila = [
                                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 r_nom,
@@ -518,7 +531,7 @@ else:
                                 "",
                                 r_pass1,
                                 foto_para_guardar,
-                                "SI"  # <--- CORREGIDO: SE GUARDA COMO VALIDADO AL INSTANTE
+                                "SI"
                             ]
                             wks.append_row(nueva_fila)
                             st.success("✅ ¡Registro Exitoso! Ya puedes ingresar desde la pestaña superior.")
