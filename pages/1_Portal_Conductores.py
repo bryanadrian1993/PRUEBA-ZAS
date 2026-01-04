@@ -9,14 +9,21 @@ import math
 import os
 import time
 import io
+import re
 from PIL import Image
 from datetime import datetime
 from streamlit_js_eval import get_geolocation
+from streamlit_autorefresh import st_autorefresh  # <--- ESTO FALTABA
 import requests
 import streamlit.components.v1 as components
 
 # --- 🔗 CONFIGURACIÓN TÉCNICA ---
 st.set_page_config(page_title="Portal Conductores", page_icon="🚖", layout="centered")
+
+# --- 🔄 AUTO-REFRESCO (VITAL PARA EL GPS) ---
+# Esto hace que la app se actualice cada 10 segundos para enviar coordenadas nuevas
+if st.session_state.get('usuario_activo', False):
+    st_autorefresh(interval=10000, key="gps_alive")
 
 # --- 🔌 CONEXIÓN SEGURA A GOOGLE SHEETS ---
 scopes = [
@@ -37,7 +44,7 @@ LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO"
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
 
-# --- FUNCIÓN DE PAGO PAYPAL (Visualización Bloqueo) ---
+# --- FUNCIÓN DE PAGO PAYPAL ---
 def mostrar_boton_pago(monto_deuda):
     st.header("🔓 Desbloqueo Automático (PayPal)")
     st.warning(f"Tu deuda es de **${monto_deuda:.2f}**. Debes pagarla completa para desbloquearte.")
@@ -48,7 +55,6 @@ def mostrar_boton_pago(monto_deuda):
         client_id = "AS96Gq4_mueF7i7xjUzx2nEgYSmiS6t69datLVrPMwxDIxboQC00sZf7TBM6KwkRxUL92ys0I-JXXq_y"
         valor_a_pagar = f"{monto_deuda:.2f}"
         
-        # HTML Corregido para móviles y con campos expandidos
         _html = f"""
         <!DOCTYPE html>
         <html>
@@ -115,20 +121,22 @@ VEHICULOS = ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔", "Moto Entrega 🏍
 
 # --- 🛰️ CAPTURA GPS ---
 loc = get_geolocation()
+lat_actual, lon_actual = None, None
+
 if loc and 'coords' in loc:
     lat_actual = loc['coords']['latitude']
     lon_actual = loc['coords']['longitude']
-else:
-    lat_actual, lon_actual = None, None
 
 # --- 🛠️ FUNCIONES ---
 def cargar_datos(hoja):
-    GID_CHOFERES = "773119638"
-    GID_VIAJES   = "0"
     try:
-        gid_actual = GID_CHOFERES if hoja == "CHOFERES" else GID_VIAJES
-        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={gid_actual}&cache_buster={time.time()}"
-        df = pd.read_csv(url)
+        sh = client.open_by_key(SHEET_ID)
+        wks = sh.worksheet(hoja)
+        data = wks.get_all_values()
+        if not data: return pd.DataFrame()
+        headers = data[0]
+        rows = data[1:]
+        df = pd.DataFrame(rows, columns=headers)
         df.columns = df.columns.str.strip()
         return df
     except Exception as e:
@@ -149,14 +157,42 @@ def enviar_datos_a_sheets(datos):
             return response.read().decode('utf-8')
     except: return "Error"
 
+def actualizar_gps_excel(conductor, lat, lon):
+    try:
+        sh = client.open_by_key(SHEET_ID)
+        try:
+            wks = sh.worksheet("UBICACIONES")
+        except:
+            wks = sh.add_worksheet(title="UBICACIONES", rows=1000, cols=5)
+            wks.append_row(["Conductor", "Latitud", "Longitud", "Ultima_Actualizacion"])
+        
+        conductores = wks.col_values(1)
+        nombre_limpio = conductor.strip().upper()
+        ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        try:
+            fila = conductores.index(nombre_limpio) + 1
+            wks.update_cell(fila, 2, lat)
+            wks.update_cell(fila, 3, lon)
+            wks.update_cell(fila, 4, ahora)
+        except ValueError:
+            wks.append_row([nombre_limpio, lat, lon, ahora])
+        return True
+    except: return False
+
 # --- 📱 INTERFAZ ---
 st.title("🚖 Portal de Socios")
 
 if st.session_state.usuario_activo:
     # --- PANEL CHOFER ---
     df_fresh = cargar_datos("CHOFERES")
-    user_nom = str(st.session_state.datos_usuario['Nombre']).strip()
-    user_ape = str(st.session_state.datos_usuario['Apellido']).strip()
+    
+    if df_fresh.empty or 'Nombre' not in df_fresh.columns:
+        st.error("⚠️ Error de conexión con la base de datos.")
+        st.stop()
+
+    user_nom = str(st.session_state.datos_usuario.get('Nombre', '')).strip()
+    user_ape = str(st.session_state.datos_usuario.get('Apellido', '')).strip()
     nombre_completo_unificado = f"{user_nom} {user_ape}".upper()
     
     fila_actual = df_fresh[
@@ -206,22 +242,26 @@ if st.session_state.usuario_activo:
                         st.rerun()
     st.write("---") 
 
-    if st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True):
+    gps_activo = st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True)
+    if gps_activo:
         if lat_actual and lon_actual:
-            res = enviar_datos({
-                "accion": "actualizar_ubicacion",
-                "conductor": nombre_completo_unificado,
-                "latitud": lat_actual,
-                "longitud": lon_actual
-            })
-            if res:
-                st.success(f"📍 Ubicación activa: {lat_actual}, {lon_actual}")
+            res_gps = actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
+            if res_gps:
+                hora = datetime.now().strftime("%H:%M:%S")
+                st.success(f"📡 SEÑAL EN VIVO ({hora})\n📍 Lat: {lat_actual:.5f}, Lon: {lon_actual:.5f}")
         else:
-            st.warning("🛰️ Esperando señal de GPS... Por favor, permite el acceso en tu navegador.")
-    
+            st.warning("⏳ Buscando señal satelital... (Asegúrate de permitir la ubicación)")
+    else:
+        st.info("Rastreo desactivado.")
+
     if not fila_actual.empty:
-        deuda_actual = float(fila_actual.iloc[0, 17])
-        estado_actual = str(fila_actual.iloc[0, 8]) 
+        try:
+            raw_deuda = str(fila_actual.iloc[0].get('DEUDA', 0)).replace('$','').replace(',','')
+            deuda_actual = float(raw_deuda) if raw_deuda else 0.0
+        except:
+            deuda_actual = 0.0
+            
+        estado_actual = str(fila_actual.iloc[0].get('Estado', 'OCUPADO'))
         
         if deuda_actual >= DEUDA_MAXIMA and "LIBRE" in estado_actual.upper():
             st.error("⚠️ DESCONEXIÓN AUTOMÁTICA: Tu deuda superó el límite permitido.")
@@ -269,26 +309,17 @@ if st.session_state.usuario_activo:
                 sugerencia = float(deuda_actual) if deuda_actual > 0 else 5.00
                 st.write("Confirma o escribe la cantidad a pagar:")
                 monto_final = st.number_input("Monto a Pagar ($):", min_value=1.00, value=sugerencia, step=1.00)
-                cedula_usuario = str(fila_actual.iloc[0, 0]) 
+                cedula_usuario = str(fila_actual.iloc[0].get('Cedula', '0000000000'))
                 client_id = "AbTSfP381kOrNXmRJO8SR7IvjtjLx0Qmj1TyERiV5RzVheYAAxvgGWHJam3KE_iyfcrf56VV_k-MPYmv"
                 
-                # --- SOLUCIÓN DEFINITIVA PAYPAL ---
                 paypal_html_tab = f"""
                 <!DOCTYPE html>
                 <html>
                 <head>
                     <meta name="viewport" content="width=device-width, initial-scale=1">
                     <style>
-                        html, body {{
-                            height: 100%;
-                            margin: 0;
-                            padding: 0;
-                            overflow: auto;
-                        }}
-                        #paypal-button-container-final {{
-                            min-height: 600px;
-                            width: 100%;
-                        }}
+                        html, body {{ height: 100%; margin: 0; padding: 0; overflow: auto; }}
+                        #paypal-button-container-final {{ min_height: 600px; width: 100%; }}
                     </style>
                 </head>
                 <body>
@@ -296,46 +327,30 @@ if st.session_state.usuario_activo:
                     <script src="https://www.paypal.com/sdk/js?client-id={client_id}&currency=USD&components=buttons"></script>
                     <script>
                         paypal.Buttons({{
-                            style: {{
-                                layout: 'vertical',
-                                color:  'gold',
-                                shape:  'rect',
-                                label:  'pay',
-                                disableMaxWidth: true  
-                            }},
+                            style: {{ layout: 'vertical', color: 'gold', shape: 'rect', label: 'pay', disableMaxWidth: true }},
                             createOrder: function(data, actions) {{
                                 return actions.order.create({{
-                                    purchase_units: [{{
-                                        amount: {{ value: '{monto_final}' }},
-                                        custom_id: '{cedula_usuario}' 
-                                    }}]
+                                    purchase_units: [{{ amount: {{ value: '{monto_final}' }}, custom_id: '{cedula_usuario}' }}]
                                 }});
                             }},
                             onApprove: function(data, actions) {{
                                 return actions.order.capture().then(function(details) {{
                                     alert('✅ Pago exitoso de ${monto_final}.');
                                 }});
-                            }},
-                            onError: function (err) {{
-                                console.error('Error:', err);
-                                alert('No se pudo cargar el formulario de pago.');
                             }}
                         }}).render('#paypal-button-container-final');
                     </script>
                 </body>
                 </html>
                 """
-                
                 components.html(paypal_html_tab, height=700, scrolling=True)
                 
                 if deuda_actual >= DEUDA_MAXIMA:
-                    minimo_para_desbloqueo = deuda_actual - DEUDA_MAXIMA + 0.01
                     st.error(f"⚠️ CUENTA BLOQUEADA (Deuda: ${deuda_actual}).")
-                    st.info(f"💡 Para desbloquearte, debes pagar al menos: **${minimo_para_desbloqueo:.2f}**")
                 elif deuda_actual > 0:
-                    st.warning(f"Tienes deuda pendiente, pero aún puedes trabajar (Límite: ${DEUDA_MAXIMA}).")
+                    st.warning(f"Tienes deuda pendiente (Límite: ${DEUDA_MAXIMA}).")
                 else:
-                    st.success("✅ Estás al día. Puedes recargar saldo a favor.")
+                    st.success("✅ Estás al día.")
         st.divider()
 
         st.subheader("Gestión de Viaje")
@@ -358,19 +373,24 @@ if st.session_state.usuario_activo:
                     try:
                         link_mapa = str(datos_v.get('Mapa', ''))
                         distancia = 2.0
-                        if '0' in link_mapa and ',' in link_mapa:
-                            try:
-                                lat_cli = float(link_mapa.split('0')[1].split(',')[0])
-                                lon_cli = float(link_mapa.split('0')[1].split(',')[1])
+                        
+                        try:
+                            numeros = re.findall(r'-?\d+\.\d+', link_mapa)
+                            if len(numeros) >= 2:
+                                lat_cli = float(numeros[-2])
+                                lon_cli = float(numeros[-1])
+                                
                                 dLat = math.radians(lat_actual - lat_cli)
                                 dLon = math.radians(lon_actual - lon_cli)
                                 a = math.sin(dLat/2)**2 + math.cos(math.radians(lat_cli)) * \
                                     math.cos(math.radians(lat_actual)) * math.sin(dLon/2)**2
                                 c = 2 * math.asin(math.sqrt(a))
                                 distancia = 6371 * c 
-                            except: pass
+                        except: pass
+                        
                         if distancia < 1.0: distancia = 1.0
                         comision_nueva = round(distancia * TARIFA_POR_KM, 2)
+                        
                         res = enviar_datos_a_sheets({
                             "accion": "finalizar_y_deuda",
                             "conductor": nombre_completo_unificado,
@@ -392,12 +412,16 @@ if st.session_state.usuario_activo:
                 st.button("🟢 PONERME LIBRE", disabled=True)
             else:
                 if "OCUPADO" in estado_actual:
-                    st.info("Estás en estado OCUPADO (Sin pasajero de App).")
+                    st.info("Estás en estado OCUPADO.")
                 col_lib, col_ocu = st.columns(2)
                 with col_lib:
                     if st.button("🟢 PONERME LIBRE", use_container_width=True):
                         enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "LIBRE"})
+                        if lat_actual and lon_actual:
+                            # Forzamos actualización de GPS en Excel
+                            actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
                         st.rerun()
+                        
                 with col_ocu:
                     if st.button("🔴 PONERME OCUPADO", use_container_width=True):
                         enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "OCUPADO"})
@@ -432,17 +456,21 @@ else:
         l_pass = st.text_input("Contraseña", type="password")
         if st.button("ENTRAR AL PANEL", type="primary"):
             df = cargar_datos("CHOFERES")
-            match = df[
-                (df['Nombre'].astype(str).str.strip().str.upper() == l_nom.strip().upper()) & 
-                (df['Apellido'].astype(str).str.strip().str.upper() == l_ape.strip().upper()) & 
-                (df['Clave'].astype(str).str.strip() == l_pass.strip())
-            ]
-            if not match.empty:
-                st.session_state.usuario_activo = True
-                st.session_state.datos_usuario = match.iloc[0].to_dict()
-                st.rerun()
+            # Validación robusta de columnas
+            if df.empty or 'Nombre' not in df.columns:
+                st.error("❌ No se pudo conectar con la base de datos.")
             else:
-                st.error("❌ Datos incorrectos o usuario no encontrado.")
+                match = df[
+                    (df['Nombre'].astype(str).str.strip().str.upper() == l_nom.strip().upper()) & 
+                    (df['Apellido'].astype(str).str.strip().str.upper() == l_ape.strip().upper()) & 
+                    (df['Clave'].astype(str).str.strip() == l_pass.strip())
+                ]
+                if not match.empty:
+                    st.session_state.usuario_activo = True
+                    st.session_state.datos_usuario = match.iloc[0].to_dict()
+                    st.rerun()
+                else:
+                    st.error("❌ Datos incorrectos o usuario no encontrado.")
     st.markdown("---") 
     with st.expander("¿Olvidaste tu contraseña?"):
         st.info("Ingresa tu correo registrado para recibir tu clave:")
@@ -505,20 +533,27 @@ else:
                         with st.spinner("Conectando con Excel..."):
                             sh = client.open_by_key(SHEET_ID)
                             wks = sh.worksheet("CHOFERES")
+                            # --- SE GUARDA COMO VALIDADO "SI" AUTOMÁTICAMENTE ---
+                            # --- SOLUCIÓN DE POSICIONAMIENTO DE COLUMNAS ---
                             nueva_fila = [
-                                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                r_nom,
-                                r_ape,
-                                r_ced,
-                                r_email,
-                                r_dir,
-                                r_telf,
-                                r_pla,
-                                "LIBRE",
-                                "",
-                                r_pass1,
-                                foto_para_guardar,
-                                "SI"  # <--- AQUÍ ESTÁ EL CAMBIO IMPORTANTE: YA SALE VALIDADO
+                                datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # A: Fecha
+                                r_nom, # B: Nombre
+                                r_ape, # C: Apellido
+                                r_ced, # D: Cedula
+                                r_email, # E: Email
+                                r_dir, # F: Direccion
+                                r_telf, # G: Telefono
+                                r_pla, # H: Placa
+                                "LIBRE", # I: Estado
+                                "", # J: Vence
+                                r_pass1, # K: Clave
+                                foto_para_guardar, # L: Foto
+                                "SI", # M: Validado
+                                r_pais, # N: Pais
+                                r_idioma, # O: Idioma
+                                r_veh, # P: Tipo_Vehiculo
+                                0, # Q: KM_ACUMULADOS
+                                0.00 # R: DEUDA
                             ]
                             wks.append_row(nueva_fila)
                             st.success("✅ ¡Registro Exitoso! Ya puedes ingresar desde la pestaña superior.")
