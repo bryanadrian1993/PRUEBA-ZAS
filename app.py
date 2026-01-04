@@ -107,20 +107,37 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
     if df_c.empty or df_u.empty: 
         return None, None, None, "S/P"
     
-    tipo_b = tipo_sol.split(" ")[0].upper()
-
-    if 'ESTADO' not in df_c.columns: 
+    # DEBUG: Mostrar lo que hay en CHOFERES
+    st.write("🔍 DEBUG CHOFERES:")
+    st.write(f"Total conductores: {len(df_c)}")
+    if 'ESTADO' in df_c.columns:
+        st.write(f"Estados disponibles: {df_c['ESTADO'].unique()}")
+        st.write(f"Conductores LIBRES: {len(df_c[df_c['ESTADO'].astype(str).str.upper().str.strip() == 'LIBRE'])}")
+    else:
+        st.error("❌ No se encontró la columna ESTADO")
+        st.write(f"Columnas disponibles: {df_c.columns.tolist()}")
         return None, None, None, "Error Cols"
     
+    if 'TIPO_VEHICULO' in df_c.columns:
+        st.write(f"Tipos de vehículo: {df_c['TIPO_VEHICULO'].unique()}")
+    
+    tipo_b = tipo_sol.split(" ")[0].upper()
+    st.write(f"Buscando tipo: {tipo_b}")
+
     libres = df_c[
         (df_c['ESTADO'].astype(str).str.upper().str.strip() == 'LIBRE') & 
         (df_c['TIPO_VEHICULO'].astype(str).str.upper().str.contains(tipo_b))
     ]
+    
+    st.write(f"✅ Conductores LIBRES del tipo {tipo_b}: {len(libres)}")
 
     if 'DEUDA' in libres.columns:
+        antes = len(libres)
         libres = libres[pd.to_numeric(libres['DEUDA'], errors='coerce').fillna(0) < 10.00]
+        st.write(f"Después de filtro de deuda: {len(libres)} (eliminados: {antes - len(libres)})")
 
     if libres.empty: 
+        st.warning("No quedan conductores después de filtros")
         return None, None, None, "S/P"
 
     col_cond_u = next((c for c in df_u.columns if "CONDUCTOR" in c), None)
@@ -128,9 +145,13 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
     col_lon_u = next((c for c in df_u.columns if "LON" in c), None)
 
     if not (col_cond_u and col_lat_u and col_lon_u): 
+        st.error(f"Columnas UBICACIONES: {df_u.columns.tolist()}")
         return None, None, None, "Error Ubi Cols"
 
     df_u['KEY_CLEAN'] = df_u[col_cond_u].astype(str).str.strip().str.upper()
+    
+    st.write(f"🗺️ Conductores en UBICACIONES: {len(df_u)}")
+    st.write(f"Nombres en UBICACIONES: {df_u['KEY_CLEAN'].tolist()}")
 
     mejor_chofer = None
     menor_distancia = float('inf')
@@ -139,6 +160,8 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
         n = str(chofer.get('NOMBRE', '')).replace('nan','').strip()
         a = str(chofer.get('APELLIDO', '')).replace('nan','').strip()
         nombre_completo = f"{n} {a}".strip().upper()
+        
+        st.write(f"🔎 Buscando ubicación de: {nombre_completo}")
 
         ubi = df_u[df_u['KEY_CLEAN'] == nombre_completo]
         
@@ -149,16 +172,22 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
                 
                 d = calcular_distancia_real(lat_cli, lon_cli, lat_cond, lon_cond)
                 
+                st.write(f"✅ {nombre_completo}: {d:.2f} km")
+                
                 if d < 10000 and d < menor_distancia: 
                     menor_distancia = d
                     mejor_chofer = chofer
-            except: 
+            except Exception as e:
+                st.write(f"❌ Error calculando distancia: {e}")
                 continue
+        else:
+            st.write(f"⚠️ {nombre_completo} no tiene ubicación GPS registrada")
 
     if mejor_chofer is not None:
         t = str(mejor_chofer.get('TELEFONO', '0000000000')).split('.')[0].strip()
         foto = str(mejor_chofer.get('FOTO_PERFIL', 'SIN_FOTO'))
         placa = str(mejor_chofer.get('PLACA', 'S/P'))
+        st.success(f"🎯 Mejor chofer: {mejor_chofer.get('NOMBRE')} {mejor_chofer.get('APELLIDO')} a {menor_distancia:.2f} km")
         return mejor_chofer, t, foto, placa
         
     return None, None, None, "S/P"
