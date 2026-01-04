@@ -17,7 +17,7 @@ from PIL import Image
 # --- ⚙️ CONFIGURACIÓN DEL SISTEMA ---
 st.set_page_config(page_title="TAXI SEGURO", page_icon="🚖", layout="centered")
 
-# AUTO-REFRESCO: Actualiza la app cada 4 segundos (Vital para que el mapa se mueva y el GPS cargue)
+# AUTO-REFRESCO: Actualiza la app cada 4 segundos
 st_autorefresh(interval=4000, key="datarefresh")
 
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
@@ -26,7 +26,7 @@ URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4
 if 'viaje_confirmado' not in st.session_state: st.session_state.viaje_confirmado = False
 if 'datos_pedido' not in st.session_state: st.session_state.datos_pedido = {}
 
-# 🎨 ESTILOS CSS (TU DISEÑO ORIGINAL)
+# 🎨 ESTILOS CSS (TU DISEÑO ORIGINAL EXACTO)
 st.markdown("""
     <style>
     .main-title { font-size: 40px; font-weight: bold; text-align: center; color: #000; margin-bottom: 0; }
@@ -63,7 +63,7 @@ def cargar_datos(hoja):
         cb = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cb}"
         df = pd.read_csv(url)
-        # TRUCO: Convertimos columnas a mayúsculas para evitar errores de lectura
+        # --- LIMPIEZA CLAVE: Convertir columnas a mayúsculas y quitar espacios ---
         df.columns = df.columns.str.strip().str.upper()
         return df
     except: return pd.DataFrame()
@@ -81,10 +81,9 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
     
     if df_c.empty or df_u.empty: return None, None, None, "S/P"
     
-    # 1. Columnas ya están en MAYÚSCULAS por cargar_datos()
     tipo_b = tipo_sol.split(" ")[0].upper()
 
-    # 2. Filtro de conductores
+    # Validación de seguridad para columnas
     if 'ESTADO' not in df_c.columns: return None, None, None, "Error Columnas"
     
     libres = df_c[
@@ -97,8 +96,8 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
 
     if libres.empty: return None, None, None, "S/P"
 
-    # 3. Búsqueda dinámica de columnas en UBICACIONES
-    # Esto soluciona si la columna se llama "CONDUCTOR", "Conductor", "Nombre", etc.
+    # --- BÚSQUEDA DINÁMICA DE COLUMNAS EN UBICACIONES ---
+    # Esto busca cualquier columna que contenga la palabra clave, sin importar mayúsculas/minúsculas
     col_cond_u = next((c for c in df_u.columns if "CONDUCTOR" in c), None)
     col_lat_u = next((c for c in df_u.columns if "LAT" in c), None)
     col_lon_u = next((c for c in df_u.columns if "LON" in c), None)
@@ -127,7 +126,7 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
                 
                 dist = calcular_distancia_real(lat_cli, lon_cli, lat_cond, lon_cond)
                 
-                # Radio de 10000 km para asegurar que funcione en pruebas
+                # Radio aumentado a 10000 km para asegurar que funcione en pruebas
                 if dist < 10000 and dist < menor_distancia:
                     menor_distancia = dist
                     mejor_chofer = conductor
@@ -153,7 +152,7 @@ if loc and 'coords' in loc:
     lon_actual = loc['coords']['longitude']
     st.success(f"📍 Tu Ubicación: {lat_actual:.5f}, {lon_actual:.5f}")
 else:
-    st.warning("⚠️ Esperando señal GPS...")
+    st.warning("⚠️ Esperando señal GPS... (Asegúrate de permitir ubicación)")
 
 if not st.session_state.viaje_confirmado:
     with st.form("form_pedido"):
@@ -165,7 +164,10 @@ if not st.session_state.viaje_confirmado:
 
     if enviar:
         if not (nombre_cli and ref_cli and lat_actual):
-            st.error("Por favor completa los datos y espera la señal GPS.")
+            if not lat_actual:
+                st.error("🚫 NO TENEMOS TU GPS. Por favor activa la ubicación y espera que aparezca en verde.")
+            else:
+                st.error("Por favor completa los datos.")
         else:
             with st.spinner("🔄 Buscando unidad..."):
                 chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
@@ -180,26 +182,29 @@ if not st.session_state.viaje_confirmado:
                     mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
                     
                     # 1. Registrar
-                    enviar_datos_a_sheets({
+                    res_pedido = enviar_datos_a_sheets({
                         "accion": "registrar_pedido", "id_viaje": id_v,
                         "cliente": nombre_cli, "tel_cliente": celular_input, "referencia": ref_cli,
                         "conductor": nombre_chof, "tel_conductor": t_chof, "mapa": mapa_url
                     })
                     
                     # 2. Ocupar
-                    enviar_datos_a_sheets({"accion": "cambiar_estado", "conductor": nombre_chof, "estado": "OCUPADO"})
-                    
-                    # 3. GUARDAR ESTADO Y RECARGAR (SOLUCIÓN A TU PROBLEMA)
-                    st.session_state.viaje_confirmado = True
-                    st.session_state.datos_pedido = {
-                        "chof": nombre_chof, "t_chof": t_chof, "foto": foto_chof, 
-                        "placa": placa, "id": id_v, "mapa": mapa_url, 
-                        "lat_cli": lat_actual, "lon_cli": lon_actual, 
-                        "nombre": nombre_cli, "ref": ref_cli
-                    }
-                    st.rerun() # <--- ESTE COMANDO HACE QUE APAREZCA LA SIGUIENTE PANTALLA
+                    if "Registrado" in str(res_pedido) or "Ok" in str(res_pedido):
+                        enviar_datos_a_sheets({"accion": "cambiar_estado", "conductor": nombre_chof, "estado": "OCUPADO"})
+                        
+                        # 3. GUARDAR ESTADO Y RECARGAR (SOLUCIÓN A TU PROBLEMA)
+                        st.session_state.viaje_confirmado = True
+                        st.session_state.datos_pedido = {
+                            "chof": nombre_chof, "t_chof": t_chof, "foto": foto_chof, 
+                            "placa": placa, "id": id_v, "mapa": mapa_url, 
+                            "lat_cli": lat_actual, "lon_cli": lon_actual, 
+                            "nombre": nombre_cli, "ref": ref_cli
+                        }
+                        st.rerun() # <--- ESTO FUERZA EL CAMBIO DE PANTALLA
+                    else:
+                        st.error("Error conectando con la base de datos.")
                 else:
-                     st.warning("⚠️ No hay conductores disponibles cerca de tu ubicación.")
+                     st.warning("⚠️ No hay conductores disponibles. Revisa que el conductor esté LIBRE y con el GPS activo.")
 
 if st.session_state.viaje_confirmado:
     dp = st.session_state.datos_pedido
@@ -232,28 +237,31 @@ if st.session_state.viaje_confirmado:
 
     try:
         df_u = cargar_datos("UBICACIONES")
-        # Buscar columna conductor
-        c_cond = next((c for c in df_u.columns if "CONDUCTOR" in c), None)
-        c_lat = next((c for c in df_u.columns if "LAT" in c), None)
-        c_lon = next((c for c in df_u.columns if "LON" in c), None)
+        # Aseguramos nombres en mayúsculas
+        df_u.columns = df_u.columns.str.strip().str.upper()
         
-        if c_cond and c_lat and c_lon:
-            # Filtramos por el nombre del chofer asignado
-            df_u['KEY'] = df_u[c_cond].astype(str).str.strip().str.upper()
-            pos = df_u[df_u['KEY'] == str(dp['chof']).upper().strip()]
-            
-            if not pos.empty:
-                lt = float(pos.iloc[-1][c_lat])
-                ln = float(pos.iloc[-1][c_lon])
+        # Búsqueda dinámica de columna CONDUCTOR
+        col_cond = next((c for c in df_u.columns if "CONDUCTOR" in c), None)
+        col_lat = next((c for c in df_u.columns if "LAT" in c), None)
+        col_lon = next((c for c in df_u.columns if "LON" in c), None)
+        
+        if col_cond and col_lat and col_lon:
+             df_u['KEY_COND'] = df_u[col_cond].astype(str).str.strip().str.upper()
+             pos_t = df_u[df_u['KEY_COND'] == str(dp['chof']).strip().upper()]
+        
+             if not pos_t.empty:
+                lt = float(pos_t.iloc[-1][col_lat])
+                ln = float(pos_t.iloc[-1][col_lon])
                 
                 # Calculos de distancia
                 dist_km = calcular_distancia_real(lt, ln, dp['lat_cli'], dp['lon_cli'])
                 tiempo_min = round((dist_km / 30) * 60) + 2 
+                
                 txt_eta = f"Llega en {tiempo_min} min" if tiempo_min > 1 else "¡Llegando!"
                 st.markdown(f'<div class="eta-box">🕒 {txt_eta} ({dist_km:.2f} km)</div>', unsafe_allow_html=True)
-
-                # Mapa
-                ruta = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], ln, lt)
+                
+                camino_data = obtener_ruta_carretera(dp['lon_cli'], dp['lat_cli'], lon_t, lat_t)
+                
                 puntos_mapa = pd.DataFrame([
                     {"lon": dp['lon_cli'], "lat": dp['lat_cli'], "color": [34, 139, 34], "info": "TÚ"},
                     {"lon": ln, "lat": lt, "color": [255, 215, 0], "info": f"TAXI {dp['placa']}"}
@@ -261,18 +269,22 @@ if st.session_state.viaje_confirmado:
 
                 st.pydeck_chart(pdk.Deck(
                     map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
-                    initial_view_state=pdk.ViewState(latitude=lt, longitude=ln, zoom=15, pitch=0),
+                    initial_view_state=pdk.ViewState(latitude=(lat_actual + lt)/2, longitude=(lon_actual + ln)/2, zoom=14, pitch=0),
                     tooltip={"text": "{info}"},
                     layers=[
-                        pdk.Layer("PathLayer", data=ruta, get_path="path", get_color=[255, 0, 0], get_width=8),
-                        pdk.Layer("ScatterplotLayer", data=puntos_mapa, get_position="[lon, lat]", get_color="color", get_radius=20, pickable=True)
+                        pdk.Layer("PathLayer", data=camino_data, get_path="path", get_color=[0, 0, 255], get_width=5, width_min_pixels=3),
+                        pdk.Layer("ScatterplotLayer", data=puntos_mapa, get_position="[lon, lat]", get_fill_color="color", get_radius="radio", pickable=True, radius_scale=6)
                     ]
                 ))
                 
                 if st.button("🔄 ACTUALIZAR MAPA"):
                     st.rerun()
-            else:
+             else:
                 st.warning("📡 Esperando señal GPS del conductor...")
-    except: pass
+        else:
+             st.error("⚠️ Error leyendo base de datos de ubicación.")
+            
+    except Exception as e:
+        st.error(f"Error cargando mapa: {e}")
 
 st.markdown('<div class="footer">📩 contacto: soporte@taxiseguro.com</div>', unsafe_allow_html=True)
