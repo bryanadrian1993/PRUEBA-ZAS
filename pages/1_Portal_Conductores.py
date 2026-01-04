@@ -9,7 +9,7 @@ import math
 import os
 import time
 import io
-import re  # <--- YA LA TENIAS, AHORA LA USAREMOS ABAJO
+import re  # <--- IMPORTANTE: Librería para leer el mapa correctamente
 from PIL import Image
 from datetime import datetime
 from streamlit_js_eval import get_geolocation
@@ -113,13 +113,13 @@ PAISES = ["Ecuador", "Colombia", "Perú", "México", "España", "Otro"]
 IDIOMAS = ["Español", "English"]
 VEHICULOS = ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔", "Moto Entrega 🏍️"]
 
-# --- 🛰️ CAPTURA GPS ---
+# --- 🛰️ CAPTURA GPS ESTRICTA (Sin coordenadas falsas) ---
 loc = get_geolocation()
+lat_actual, lon_actual = None, None # Se inicia vacio
+
 if loc and 'coords' in loc:
     lat_actual = loc['coords']['latitude']
     lon_actual = loc['coords']['longitude']
-else:
-    lat_actual, lon_actual = None, None
 
 # --- 🛠️ FUNCIONES ---
 def cargar_datos(hoja):
@@ -237,12 +237,17 @@ if st.session_state.usuario_activo:
     st.write("---") 
 
     gps_activo = st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True)
-    if gps_activo and lat_actual and lon_actual:
-        res_gps = actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
-        if res_gps:
-            st.success(f"📍 GPS Transmitiendo... ({lat_actual:.4f}, {lon_actual:.4f})")
-    elif not (lat_actual and lon_actual):
-        st.warning("🛰️ Buscando señal de GPS... (Permite ubicación en navegador)")
+    if gps_activo:
+        if lat_actual and lon_actual:
+            # Solo si hay coordenadas reales
+            res_gps = actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
+            if res_gps:
+                st.success(f"📍 GPS Transmitiendo... ({lat_actual:.5f}, {lon_actual:.5f})")
+        else:
+            # Si no hay, no se inventa nada
+            st.warning("⏳ Buscando señal satelital... (No se enviará ubicación hasta conectar)")
+    else:
+        st.info("Rastreo desactivado.")
 
     if not fila_actual.empty:
         try:
@@ -365,14 +370,14 @@ if st.session_state.usuario_activo:
                         link_mapa = str(datos_v.get('Mapa', ''))
                         distancia = 2.0
                         
-                        # --- AQUÍ ESTABA TU ERROR ANTERIOR ---
-                        # Usamos la librería 're' para extraer la latitud y longitud EXACTAS
-                        # Esto evita que se borre el signo negativo o se rompa el link.
+                        # --- AQUÍ ESTÁ EL ARREGLO DE LOS $7.43 ---
+                        # Usamos REGEX para leer las coordenadas matemáticas exactas
+                        # Esto evita que se borre el signo negativo o se confundan los ceros
                         try:
                             numeros = re.findall(r'-?\d+\.\d+', link_mapa)
                             if len(numeros) >= 2:
-                                lat_cli = float(numeros[-2]) # Penúltimo es Latitud
-                                lon_cli = float(numeros[-1]) # Último es Longitud
+                                lat_cli = float(numeros[-2])
+                                lon_cli = float(numeros[-1])
                                 
                                 dLat = math.radians(lat_actual - lat_cli)
                                 dLon = math.radians(lon_actual - lon_cli)
