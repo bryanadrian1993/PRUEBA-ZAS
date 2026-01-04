@@ -37,6 +37,12 @@ LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO"
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
 
+# --- 🔄 INICIALIZAR SESIÓN (SOLUCIÓN ERROR PANTALLA ROJA) ---
+if 'usuario_activo' not in st.session_state:
+    st.session_state['usuario_activo'] = False
+if 'datos_usuario' not in st.session_state:
+    st.session_state['datos_usuario'] = {}
+
 # --- FUNCIÓN DE PAGO PAYPAL ---
 def mostrar_boton_pago(monto_deuda):
     st.header("🔓 Desbloqueo Automático (PayPal)")
@@ -97,48 +103,7 @@ def mostrar_boton_pago(monto_deuda):
     else:
         st.info("👆 Escribe tu identificación para ver el botón de pago.")
 
-def enviar_datos_requests(params):
-    try:
-        requests.post(URL_SCRIPT, params=params)
-    except Exception as e:
-        st.error(f"Error de conexión: {e}")
-
-# --- 🔄 INICIALIZAR SESIÓN (CORREGIDO PARA EVITAR ERROR) ---
-if 'usuario_activo' not in st.session_state:
-    st.session_state['usuario_activo'] = False
-if 'datos_usuario' not in st.session_state:
-    st.session_state['datos_usuario'] = {}
-
-# --- 📋 LISTAS ---
-PAISES = ["Ecuador", "Colombia", "Perú", "México", "España", "Otro"]
-IDIOMAS = ["Español", "English"]
-VEHICULOS = ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔", "Moto Entrega 🏍️"]
-
-# --- 🛰️ CAPTURA GPS ---
-loc = get_geolocation()
-if loc and 'coords' in loc:
-    lat_actual = loc['coords']['latitude']
-    lon_actual = loc['coords']['longitude']
-else:
-    lat_actual, lon_actual = None, None
-
-# --- 🛠️ FUNCIONES ---
-def cargar_datos(hoja):
-    try:
-        sh = client.open_by_key(SHEET_ID)
-        wks = sh.worksheet(hoja)
-        data = wks.get_all_values()
-        if not data:
-            return pd.DataFrame()
-        headers = data[0]
-        rows = data[1:]
-        df = pd.DataFrame(rows, columns=headers)
-        df.columns = df.columns.str.strip()
-        return df
-    except Exception as e:
-        return pd.DataFrame()
-
-# --- ESTA ES LA FUNCIÓN CLAVE QUE FALTABA USAR ---
+# --- 🛠️ FUNCIÓN DE ESCRITURA DIRECTA (ESTO FALTABA USAR) ---
 def actualizar_gps_excel(conductor, lat, lon):
     try:
         sh = client.open_by_key(SHEET_ID)
@@ -153,14 +118,17 @@ def actualizar_gps_excel(conductor, lat, lon):
         ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         try:
+            # Buscamos si existe (gspread usa base 1)
             fila = conductores.index(nombre_limpio) + 1
             wks.update_cell(fila, 2, lat)
             wks.update_cell(fila, 3, lon)
             wks.update_cell(fila, 4, ahora)
         except ValueError:
+            # Si no existe, creamos nueva fila
             wks.append_row([nombre_limpio, lat, lon, ahora])
         return True
-    except: return False
+    except Exception as e:
+        return False
 
 def enviar_datos(datos):
     try:
@@ -177,15 +145,39 @@ def enviar_datos_a_sheets(datos):
             return response.read().decode('utf-8')
     except: return "Error"
 
+# --- 🛠️ FUNCIONES DE CARGA ---
+def cargar_datos(hoja):
+    try:
+        sh = client.open_by_key(SHEET_ID)
+        wks = sh.worksheet(hoja)
+        data = wks.get_all_values()
+        if not data: return pd.DataFrame()
+        headers = data[0]
+        rows = data[1:]
+        df = pd.DataFrame(rows, columns=headers)
+        df.columns = df.columns.str.strip()
+        return df
+    except Exception as e:
+        return pd.DataFrame()
+
+# --- 🛰️ CAPTURA GPS ---
+loc = get_geolocation()
+if loc and 'coords' in loc:
+    lat_actual = loc['coords']['latitude']
+    lon_actual = loc['coords']['longitude']
+else:
+    lat_actual, lon_actual = None, None
+
 # --- 📱 INTERFAZ ---
 st.title("🚖 Portal de Socios")
 
+# --- LÓGICA PRINCIPAL (PROTEGIDA CON .GET) ---
 if st.session_state.get('usuario_activo', False):
     # --- PANEL CHOFER ---
     df_fresh = cargar_datos("CHOFERES")
     
     if df_fresh.empty or 'Nombre' not in df_fresh.columns:
-        st.error("⚠️ Error de conexión con la base de datos.")
+        st.error("⚠️ Error de conexión con la base de datos 'CHOFERES'.")
         st.stop()
 
     user_nom = str(st.session_state.datos_usuario.get('Nombre', '')).strip()
@@ -239,14 +231,14 @@ if st.session_state.get('usuario_activo', False):
                         st.rerun()
     st.write("---") 
 
-    # --- SECCIÓN GPS (AQUÍ ESTABA EL FALLO) ---
+    # --- SECCIÓN GPS (AQUÍ ESTÁ EL ARREGLO) ---
     gps_activo = st.checkbox("🛰️ RASTREO GPS ACTIVO", value=True)
     if gps_activo and lat_actual and lon_actual:
-        # 1. ESCRIBE DIRECTO EN EXCEL (ESTO FALTABA)
+        # 1. ESCRIBE DIRECTO EN EXCEL (PARA QUE EL CLIENTE TE VEA)
         actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
-        st.success(f"✅ GPS Conectado: {lat_actual:.4f}, {lon_actual:.4f} (Guardado en Nube)")
+        st.success(f"✅ GPS Actualizado en Nube: {lat_actual:.4f}, {lon_actual:.4f}")
         
-        # 2. TAMBIÉN ENVÍA AL SCRIPT
+        # 2. TAMBIÉN MANDA AL SCRIPT POR SI ACASO
         enviar_datos({
             "accion": "actualizar_ubicacion",
             "conductor": nombre_completo_unificado,
@@ -254,7 +246,7 @@ if st.session_state.get('usuario_activo', False):
             "longitud": lon_actual
         })
     elif not (lat_actual and lon_actual):
-        st.warning("⚠️ EL NAVEGADOR NO ESTÁ DANDO UBICACIÓN. Activa el GPS.")
+        st.warning("⚠️ ESPERANDO SEÑAL GPS... Revisa los permisos del navegador.")
 
     if not fila_actual.empty:
         try:
@@ -349,6 +341,10 @@ if st.session_state.get('usuario_activo', False):
                                 return actions.order.capture().then(function(details) {{
                                     alert('✅ Pago exitoso de ${monto_final}.');
                                 }});
+                            }},
+                            onError: function (err) {{
+                                console.error('Error:', err);
+                                alert('No se pudo cargar el formulario de pago.');
                             }}
                         }}).render('#paypal-button-container-final');
                     </script>
@@ -362,7 +358,7 @@ if st.session_state.get('usuario_activo', False):
                 elif deuda_actual > 0:
                     st.warning(f"Tienes deuda pendiente (Límite: ${DEUDA_MAXIMA}).")
                 else:
-                    st.success("✅ Estás al día.")
+                    st.success("✅ Estás al día. Puedes recargar saldo a favor.")
         st.divider()
 
         st.subheader("Gestión de Viaje")
@@ -419,13 +415,14 @@ if st.session_state.get('usuario_activo', False):
                 st.button("🟢 PONERME LIBRE", disabled=True)
             else:
                 if "OCUPADO" in estado_actual:
-                    st.info("Estás en estado OCUPADO (Sin pasajero de App).")
+                    st.info("Estás en estado OCUPADO.")
                 col_lib, col_ocu = st.columns(2)
                 with col_lib:
                     if st.button("🟢 PONERME LIBRE", use_container_width=True):
                         enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "LIBRE"})
+                        
+                        # --- FORZAR GPS EN EXCEL ---
                         if lat_actual and lon_actual:
-                            # AQUÍ TAMBIÉN AGREGUÉ LA ESCRITURA DIRECTA
                             actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
                         st.rerun()
                         
@@ -452,8 +449,9 @@ if st.session_state.get('usuario_activo', False):
         st.session_state.usuario_activo = False
         st.rerun()
     st.stop()
+
+# --- LOGIN / REGISTRO (SOLO SE MUESTRA SI NO ESTÁ LOGUEADO) ---
 else:
-    # --- LOGIN / REGISTRO ---
     tab_log, tab_reg = st.tabs(["🔐 INGRESAR", "📝 REGISTRARME"])
     
     with tab_log:
@@ -463,8 +461,9 @@ else:
         l_pass = st.text_input("Contraseña", type="password")
         if st.button("ENTRAR AL PANEL", type="primary"):
             df = cargar_datos("CHOFERES")
+            # Validación robusta
             if df.empty or 'Nombre' not in df.columns:
-                st.error("❌ Error de conexión con la base de datos 'CHOFERES'.")
+                st.error("❌ No se pudo conectar con la base de datos.")
             else:
                 match = df[
                     (df['Nombre'].astype(str).str.strip().str.upper() == l_nom.strip().upper()) & 
@@ -551,14 +550,8 @@ else:
                             st.balloons()
                             
                     except Exception as e:
-                        st.error(f"❌ Error al guardar en Excel: {e}")
+                        st.error(f"❌ Error al guardar: {e}")
                 else:
-                    st.warning("Por favor, completa los campos obligatorios (*)")
+                    st.warning("Completa los campos obligatorios (*)")
 
 st.markdown('<div style="text-align:center; color:#888; font-size:12px; margin-top:50px;">© 2025 Taxi Seguro Global</div>', unsafe_allow_html=True)
-if st.session_state.get('usuario_activo', False):
-    datos = st.session_state.get('datos_usuario', {})
-    estado_chofer = datos.get('estado', 'OCUPADO')
-    if "LIBRE" in str(estado_chofer):
-        time.sleep(15) 
-        st.rerun()
