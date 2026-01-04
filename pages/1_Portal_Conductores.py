@@ -37,41 +37,58 @@ LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO"
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
 
-# --- FUNCIÓN DE PAGO PAYPAL ---
+# --- FUNCIÓN DE PAGO PAYPAL (Visualización Bloqueo) ---
 def mostrar_boton_pago():
     st.header("🔓 Desbloqueo Automático (PayPal)")
     st.write("Paga tu suscripción y tu cuenta se activará al instante.")
-    cedula_conductor = st.text_input("Ingresa tu número de identificación para pagar:", max_chars=10)
+    cedula_conductor = st.text_input("Ingresa tu número de Cédula para pagar:", max_chars=10)
     if cedula_conductor:
         client_id = "AS96Gq4_mueF7i7xjUzx2nEgYSmiS6t69datLVrPMwxDIxboQC00sZf7TBM6KwkRxUL92ys0I-JXXq_y"
         valor_a_pagar = "5.00"
+        
+        # HTML Corregido para móviles
         _html = f"""
-        <div id="-button-container"></div>
-        <script src="https://www.paypal.com/sdk/js?client-id={client_id}&currency=USD"></script>
-        <script>
-            paypal.Buttons({{
-                createOrder: function(data, actions) {{
-                    return actions.order.create({{
-                        purchase_units: [{{
-                            amount: {{ value: '{valor_a_pagar}' }},
-                            custom_id: '{cedula_conductor}'
-                        }}]
-                    }});
-                }},
-                onApprove: function(data, actions) {{
-                    return actions.order.capture().then(function(details) {{
-                        alert('¡Pago Exitoso! Tu cuenta {cedula_conductor} se está desbloqueando...');
-                    }});
-                }},
-                onError: function (err) {{
-                    console.error('Error:', err);
-                    alert('Hubo un error con el pago. Intenta de nuevo.');
-                }}
-            }}).render('#-button-container');
-        </script>
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                html, body {{ margin: 0; padding: 0; height: 100%; overflow: auto; }}
+                #paypal-container {{ min_height: 600px; width: 100%; }}
+            </style>
+        </head>
+        <body>
+            <div id="paypal-container"></div>
+            <script src="https://www.paypal.com/sdk/js?client-id={client_id}&currency=USD&components=buttons"></script>
+            <script>
+                paypal.Buttons({{
+                    style: {{
+                        layout: 'vertical',
+                        color:  'gold',
+                        shape:  'rect',
+                        label:  'pay',
+                        disableMaxWidth: true 
+                    }},
+                    createOrder: function(data, actions) {{
+                        return actions.order.create({{
+                            purchase_units: [{{
+                                amount: {{ value: '{valor_a_pagar}' }},
+                                custom_id: '{cedula_conductor}'
+                            }}]
+                        }});
+                    }},
+                    onApprove: function(data, actions) {{
+                        return actions.order.capture().then(function(details) {{
+                            alert('¡Pago Exitoso! Tu cuenta se está desbloqueando...');
+                        }});
+                    }}
+                }}).render('#paypal-container');
+            </script>
+        </body>
+        </html>
         """
         st.caption(f"Total a pagar: ${valor_a_pagar}")
-        components.html(_html, height=180)
+        components.html(_html, height=650, scrolling=True)
     else:
         st.info("👆 Escribe tu cédula para ver el botón de pago.")
 
@@ -104,7 +121,7 @@ def cargar_datos(hoja):
     GID_VIAJES   = "0"
     try:
         gid_actual = GID_CHOFERES if hoja == "CHOFERES" else GID_VIAJES
-        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={gid_actual}"
+        url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={gid_actual}&cache_buster={time.time()}"
         df = pd.read_csv(url)
         df.columns = df.columns.str.strip()
         return df
@@ -249,7 +266,7 @@ if st.session_state.usuario_activo:
                 cedula_usuario = str(fila_actual.iloc[0, 0]) 
                 client_id = "AbTSfP381kOrNXmRJO8SR7IvjtjLx0Qmj1TyERiV5RzVheYAAxvgGWHJam3KE_iyfcrf56VV_k-MPYmv"
                 
-                # --- CÓDIGO HTML CORREGIDO Y OPTIMIZADO PARA MOSTRAR CAMPOS ---
+                # --- SOLUCIÓN DEFINITIVA PAYPAL ---
                 paypal_html_tab = f"""
                 <!DOCTYPE html>
                 <html>
@@ -264,14 +281,15 @@ if st.session_state.usuario_activo:
                         }}
                         #paypal-button-container-final {{
                             min-height: 600px;
-                            padding: 20px;
                             width: 100%;
                         }}
                     </style>
                 </head>
                 <body>
                     <div id="paypal-button-container-final"></div>
+
                     <script src="https://www.paypal.com/sdk/js?client-id={client_id}&currency=USD&components=buttons"></script>
+                    
                     <script>
                         paypal.Buttons({{
                             style: {{
@@ -279,8 +297,7 @@ if st.session_state.usuario_activo:
                                 color:  'gold',
                                 shape:  'rect',
                                 label:  'pay',
-                                height: 45,
-                                disableMaxWidth: true
+                                disableMaxWidth: true  // <--- ESTA LÍNEA ES LA CLAVE PARA VER TODOS LOS CAMPOS
                             }},
                             createOrder: function(data, actions) {{
                                 return actions.order.create({{
@@ -305,7 +322,7 @@ if st.session_state.usuario_activo:
                 </html>
                 """
                 
-                components.html(paypal_html_tab, height=650, scrolling=True)
+                components.html(paypal_html_tab, height=700, scrolling=True)
                 
                 if deuda_actual >= DEUDA_MAXIMA:
                     minimo_para_desbloqueo = deuda_actual - DEUDA_MAXIMA + 0.01
@@ -411,9 +428,11 @@ else:
         l_pass = st.text_input("Contraseña", type="password")
         if st.button("ENTRAR AL PANEL", type="primary"):
             df = cargar_datos("CHOFERES")
-            match = df[(df['Nombre'].astype(str).str.upper() == l_nom.upper()) & 
-                       (df['Apellido'].astype(str).str.upper() == l_ape.upper()) & 
-                       (df['Clave'].astype(str) == l_pass)]
+            match = df[
+                (df['Nombre'].astype(str).str.strip().str.upper() == l_nom.strip().upper()) & 
+                (df['Apellido'].astype(str).str.strip().str.upper() == l_ape.strip().upper()) & 
+                (df['Clave'].astype(str).str.strip() == l_pass.strip())
+            ]
             if not match.empty:
                 st.session_state.usuario_activo = True
                 st.session_state.datos_usuario = match.iloc[0].to_dict()
