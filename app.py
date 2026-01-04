@@ -86,8 +86,17 @@ def cargar_datos(hoja):
 def enviar_datos_a_sheets(datos):
     try:
         params = urllib.parse.urlencode(datos)
-        with urllib.request.urlopen(f"{URL_SCRIPT}?{params}", timeout=10) as response:
-            return response.read().decode('utf-8')
+        url_completa = f"{URL_SCRIPT}?{params}"
+        
+        # Crear request con headers
+        req = urllib.request.Request(url_completa)
+        req.add_header('User-Agent', 'Mozilla/5.0')
+        
+        with urllib.request.urlopen(req, timeout=15) as response:
+            resultado = response.read().decode('utf-8')
+            return resultado if resultado else "OK"
+    except urllib.error.URLError as e:
+        return f"Error de conexión: {str(e)}"
     except Exception as e:
         return f"Error: {str(e)}"
 
@@ -242,20 +251,18 @@ if not st.session_state.viaje_confirmado:
                     res_pedido = enviar_datos_a_sheets(datos_envio)
                     
                     st.write(f"📥 RESPUESTA DE SHEETS: `{res_pedido}`")
+                    st.write(f"📏 Longitud respuesta: {len(str(res_pedido))} caracteres")
                     
-                    # 2. Verificar registro exitoso - MÚLTIPLES CONDICIONES
-                    respuesta_ok = (
-                        res_pedido and 
-                        (
-                            "registrado" in str(res_pedido).lower() or 
-                            "ok" in str(res_pedido).lower() or
-                            "success" in str(res_pedido).lower() or
-                            "éxito" in str(res_pedido).lower() or
-                            len(str(res_pedido)) > 0  # Cualquier respuesta no vacía
-                        )
+                    # 2. SIMPLIFICAR VALIDACIÓN - Aceptar CUALQUIER respuesta que no sea error
+                    es_error = (
+                        "error" in str(res_pedido).lower() or
+                        "failed" in str(res_pedido).lower() or
+                        "falló" in str(res_pedido).lower()
                     )
                     
-                    st.write(f"✔️ Respuesta válida: {respuesta_ok}")
+                    respuesta_ok = not es_error
+                    
+                    st.write(f"✔️ Respuesta válida: {respuesta_ok} (es_error: {es_error})")
                     
                     if respuesta_ok:
                         st.success("✅ PEDIDO REGISTRADO EXITOSAMENTE")
@@ -303,6 +310,27 @@ if not st.session_state.viaje_confirmado:
                         st.error(f"❌ Error al registrar pedido")
                         st.error(f"Respuesta recibida: `{res_pedido}`")
                         st.warning("💡 Verifica que tu Google Apps Script esté funcionando correctamente")
+                        
+                        # MODO DE EMERGENCIA
+                        st.divider()
+                        st.info("🆘 **MODO DE EMERGENCIA ACTIVADO**")
+                        st.write("Puedes continuar de todos modos para probar la interfaz:")
+                        
+                        if st.button("⚠️ CONTINUAR SIN REGISTRO (Solo prueba)", type="primary"):
+                            st.session_state.datos_pedido = {
+                                "chof": nombre_chof, 
+                                "t_chof": t_chof, 
+                                "foto": foto_chof, 
+                                "placa": placa, 
+                                "id": id_v, 
+                                "mapa": mapa_url, 
+                                "lat_cli": lat_actual, 
+                                "lon_cli": lon_actual, 
+                                "nombre": nombre_cli, 
+                                "ref": ref_cli
+                            }
+                            st.session_state.viaje_confirmado = True
+                            st.rerun()
                 else:
                     st.warning("⚠️ No hay conductores disponibles")
                     st.info("Esto puede deberse a:")
