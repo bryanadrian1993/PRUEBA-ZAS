@@ -13,17 +13,17 @@ import re
 from PIL import Image
 from datetime import datetime
 from streamlit_js_eval import get_geolocation
-from streamlit_autorefresh import st_autorefresh  # <--- ESTO FALTABA
+from streamlit_autorefresh import st_autorefresh  # <--- ESTO FALTABA PARA QUE EL GPS CAMINE
 import requests
 import streamlit.components.v1 as components
 
 # --- 🔗 CONFIGURACIÓN TÉCNICA ---
 st.set_page_config(page_title="Portal Conductores", page_icon="🚖", layout="centered")
 
-# --- 🔄 AUTO-REFRESCO (VITAL PARA EL GPS) ---
-# Esto hace que la app se actualice cada 10 segundos para enviar coordenadas nuevas
+# --- 🔄 AUTO-REFRESCO (EL CORAZÓN DEL GPS) ---
+# Esto obliga a la app a "despertar" cada 10 segundos para leer el GPS nuevo
 if st.session_state.get('usuario_activo', False):
-    st_autorefresh(interval=10000, key="gps_alive")
+    st_autorefresh(interval=10000, key="gps_heartbeat")
 
 # --- 🔌 CONEXIÓN SEGURA A GOOGLE SHEETS ---
 scopes = [
@@ -306,9 +306,16 @@ if st.session_state.usuario_activo:
             tab_qr, tab_paypal = st.tabs(["📲 Transferencia/QR", "💳 Tarjeta / PayPal"])
             with tab_paypal:
                 st.subheader("🌎 Pagar con PayPal")
-                sugerencia = float(deuda_actual) if deuda_actual > 0 else 5.00
+                
+                # --- ARREGLO DEL ERROR DE PANTALLA ROJA (StreamlitValueBelowMinError) ---
+                # Si la deuda es menor a 1.00, sugerimos 1.00 para que no explote la app
+                val_sugerido = float(deuda_actual)
+                if val_sugerido < 1.00: 
+                    val_sugerido = 1.00
+                
                 st.write("Confirma o escribe la cantidad a pagar:")
-                monto_final = st.number_input("Monto a Pagar ($):", min_value=1.00, value=sugerencia, step=1.00)
+                monto_final = st.number_input("Monto a Pagar ($):", min_value=1.00, value=val_sugerido, step=1.00)
+                
                 cedula_usuario = str(fila_actual.iloc[0].get('Cedula', '0000000000'))
                 client_id = "AbTSfP381kOrNXmRJO8SR7IvjtjLx0Qmj1TyERiV5RzVheYAAxvgGWHJam3KE_iyfcrf56VV_k-MPYmv"
                 
@@ -458,7 +465,7 @@ else:
             df = cargar_datos("CHOFERES")
             # Validación robusta de columnas
             if df.empty or 'Nombre' not in df.columns:
-                st.error("❌ No se pudo conectar con la base de datos.")
+                st.error("❌ No se pudo conectar con la base de datos 'CHOFERES'. Revisa que la hoja exista y tenga los encabezados correctos.")
             else:
                 match = df[
                     (df['Nombre'].astype(str).str.strip().str.upper() == l_nom.strip().upper()) & 
