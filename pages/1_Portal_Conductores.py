@@ -41,7 +41,7 @@ URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4
 def mostrar_boton_pago():
     st.header("🔓 Desbloqueo Automático (PayPal)")
     st.write("Paga tu suscripción y tu cuenta se activará al instante.")
-    cedula_conductor = st.text_input("Ingresa tu número de Cédula para pagar:", max_chars=10)
+    cedula_conductor = st.text_input("Ingresa tu número de identificación para pagar:", max_chars=10)
     if cedula_conductor:
         client_id = "AS96Gq4_mueF7i7xjUzx2nEgYSmiS6t69datLVrPMwxDIxboQC00sZf7TBM6KwkRxUL92ys0I-JXXq_y"
         valor_a_pagar = "5.00"
