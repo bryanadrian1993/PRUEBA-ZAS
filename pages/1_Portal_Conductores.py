@@ -250,50 +250,63 @@ if st.session_state.usuario_activo:
                 cedula_usuario = str(fila_actual.iloc[0, 0]) 
                 client_id = "AbTSfP381kOrNXmRJO8SR7IvjtjLx0Qmj1TyERiV5RzVheYAAxvgGWHJam3KE_iyfcrf56VV_k-MPYmv"
                 paypal_html_tab = f"""
-<style>
-    /* Forzamos que el contenedor no tenga límites de altura internos */
-    #paypal-button-container-final {{
-        min-height: 550px !important;
-        width: 100%;
-    }}
-</style>
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <style>
+                    html, body {{
+                        height: 100%;
+                        margin: 0;
+                        padding: 0;
+                        overflow: auto;
+                    }}
+                    #paypal-button-container-final {{
+                        min-height: 600px;
+                        padding: 20px;
+                        width: 100%;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div id="paypal-button-container-final"></div>
 
-<div id="paypal-button-container-final" style="width: 100%; min-height: 550px;"></div>
+                <script src="https://www.paypal.com/sdk/js?client-id={client_id}&currency=USD&components=buttons"></script>
 
-<script src="https://www.paypal.com/sdk/js?client-id={client_id}&currency=USD&components=buttons"></script>
-
-<script>
-    paypal.Buttons({{
-        style: {{
-            layout: 'vertical',
-            color:  'blue',
-            shape:  'rect',
-            label:  'paypal',
-            // Esta opción es clave para que el botón de tarjeta funcione mejor en móviles/iframes
-            disableMaxWidth: true 
-        }},
-        createOrder: function(data, actions) {{
-            return actions.order.create({{
-                purchase_units: [{{
-                    amount: {{ value: '{monto_final}' }},
-                    custom_id: '{cedula_usuario}' 
-                }}]
-            }});
-        }},
-        onApprove: function(data, actions) {{
-            return actions.order.capture().then(function(details) {{
-                alert('✅ Pago exitoso. Gracias, ' + details.payer.name.given_name);
-            }});
-        }},
-        onError: function (err) {{
-            console.error('Error:', err);
-            alert('❌ No se pudo abrir el formulario completo. Intenta nuevamente.');
-        }}
-    }}).render('#paypal-button-container-final');
-</script>
-"""
-                components.html(paypal_html_tab, height=600)
-                if deuda_actual >= DEUDA_MAXIMA:
+                <script>
+                    paypal.Buttons({{
+                        style: {{
+                            layout: 'vertical',
+                            color:  'gold',
+                            shape:  'rect',
+                            label:  'pay',
+                            height: 45
+                        }},
+                        createOrder: function(data, actions) {{
+                            return actions.order.create({{
+                                purchase_units: [{{
+                                    amount: {{ value: '{monto_final}' }},
+                                    custom_id: '{cedula_usuario}' 
+                                }}]
+                            }});
+                        }},
+                        onApprove: function(data, actions) {{
+                            return actions.order.capture().then(function(details) {{
+                                alert('✅ Pago exitoso de ${monto_final}.');
+                            }});
+                        }},
+                        onError: function (err) {{
+                            console.error('Error:', err);
+                            alert('No se pudo cargar el formulario. Intenta recargar la página.');
+                        }}
+                    }}).render('#paypal-button-container-final');
+                </script>
+            </body>
+            </html>
+            """
+            components.html(paypal_html_tab, height=650, scrolling=True)
+            
+            if deuda_actual >= DEUDA_MAXIMA:
                     minimo_para_desbloqueo = deuda_actual - DEUDA_MAXIMA + 0.01
                     st.error(f"⚠️ CUENTA BLOQUEADA (Deuda: ${deuda_actual}).")
                     st.info(f"💡 Para desbloquearte, debes pagar al menos: **${minimo_para_desbloqueo:.2f}**")
