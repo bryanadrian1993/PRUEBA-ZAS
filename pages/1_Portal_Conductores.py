@@ -518,7 +518,7 @@ else:
                                 "",
                                 r_pass1,
                                 foto_para_guardar,
-                                "SI"  # <--- AQUÍ ESTÁ EL CAMBIO IMPORTANTE: YA SALE VALIDADO
+                                "SI"  # <--- CORREGIDO: SE GUARDA COMO VALIDADO AL INSTANTE
                             ]
                             wks.append_row(nueva_fila)
                             st.success("✅ ¡Registro Exitoso! Ya puedes ingresar desde la pestaña superior.")
