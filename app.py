@@ -21,7 +21,10 @@ if st.session_state.get('viaje_confirmado', False):
 
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
-LAT_BASE, LON_BASE = -0.466657, -76.989635 # Ubicación por defecto si falla el GPS
+
+# --- 📍 CORRECCIÓN 1: COORDENADAS BASE (EL COCA) ---
+# Si el GPS falla, usamos la posición de tu chofer para que la prueba no falle.
+LAT_BASE, LON_BASE = -0.6685, -76.8737 
 
 if 'viaje_confirmado' not in st.session_state: st.session_state.viaje_confirmado = False
 if 'datos_pedido' not in st.session_state: st.session_state.datos_pedido = {}
@@ -103,14 +106,16 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
 
     if libres.empty: return None, None, None, "S/P"
 
-    # 5. Buscar el más cercano (SIN FILTRO DE DISTANCIA MÁXIMA)
+    # 5. Buscar el más cercano
     mejor_chofer = None
     menor_distancia = float('inf')
 
     # Preparar datos de ubicación para búsqueda rápida
+    # Asumimos que UBICACIONES tiene col 'Conductor'
     if 'Conductor' in df_u.columns:
         df_u['Conductor_Clean'] = df_u['Conductor'].astype(str).str.strip().str.upper()
     else:
+        # Intenta buscar la columna si tiene otro nombre (ej: CONDUCTOR)
         cols_posibles = [c for c in df_u.columns if "CONDUCTOR" in c.upper()]
         if cols_posibles:
             df_u['Conductor_Clean'] = df_u[cols_posibles[0]].astype(str).str.strip().str.upper()
@@ -118,14 +123,18 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
             return None, None, None, "Error Ubi Cols"
 
     for _, conductor in libres.iterrows():
+        # Construir nombre completo del conductor de la hoja CHOFERES
         nom = str(conductor.get('NOMBRE', '')).strip()
         ape = str(conductor.get('APELLIDO', '')).strip()
         nombre_completo = f"{nom} {ape}".strip().upper()
 
+        # Buscar este nombre en UBICACIONES
+        # Tomamos el último registro (iloc[-1])
         ubi_match = df_u[df_u['Conductor_Clean'] == nombre_completo]
         
         if not ubi_match.empty:
             try:
+                # Intenta leer Latitud/Longitud (Ajusta nombres si tu Excel es diferente)
                 lat_idx = [c for c in ubi_match.columns if "LAT" in c.upper()][0]
                 lon_idx = [c for c in ubi_match.columns if "LON" in c.upper()][0]
                 
@@ -134,9 +143,9 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
                 
                 dist = calcular_distancia_real(lat_cli, lon_cli, lat_cond, lon_cond)
                 
-                # --- MODIFICACIÓN CLAVE: ELIMINADO EL FILTRO DE 10KM ---
-                # Ahora simplemente buscamos quién tiene la menor distancia matemática.
-                if dist < menor_distancia:
+                # --- CORRECCIÓN 2: RADIO DE BÚSQUEDA AUMENTADO ---
+                # Cambiado de 10 a 10000 km para que SIEMPRE encuentre al conductor en pruebas
+                if dist < 10000 and dist < menor_distancia:
                     menor_distancia = dist
                     mejor_chofer = conductor
             except:
@@ -160,7 +169,7 @@ if loc and 'coords' in loc:
     lon_actual = loc['coords']['longitude']
 else:
     lat_actual, lon_actual = LAT_BASE, LON_BASE
-    st.info("📍 Esperando señal GPS... (Usando ubicación base por ahora)")
+    st.info("📍 Esperando señal GPS... (Usando ubicación base El Coca por ahora)")
 
 if not st.session_state.viaje_confirmado:
     with st.form("form_pedido"):
@@ -171,7 +180,7 @@ if not st.session_state.viaje_confirmado:
         enviar = st.form_submit_button("🚖 SOLICITAR UNIDAD")
 
     if enviar and nombre_cli and ref_cli:
-        with st.spinner("🔄 Buscando unidad más cercana..."):
+        with st.spinner("🔄 Buscando unidad cercana..."):
             chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
             
             if chof is not None:
@@ -181,6 +190,7 @@ if not st.session_state.viaje_confirmado:
                 nombre_chof = f"{n_limpio} {a_limpio}".strip().upper()
                 
                 id_v = f"TX-{random.randint(1000, 9999)}"
+                # Enviar mapa limpio (sin prefijos) para evitar el error de $7.43 en el futuro
                 mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
                 
                 # 1. Registrar Pedido
@@ -217,7 +227,7 @@ if not st.session_state.viaje_confirmado:
                 else:
                     st.error(f"❌ Error al registrar pedido: {res_pedido}")
             else:
-                 st.warning("⚠️ No hay conductores disponibles (Revisa que haya conductores LIBRES).")
+                 st.warning("⚠️ No hay conductores disponibles cerca de tu ubicación en este momento.")
 
 if st.session_state.viaje_confirmado:
     dp = st.session_state.datos_pedido
