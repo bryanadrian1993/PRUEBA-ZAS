@@ -8,6 +8,7 @@ from streamlit_js_eval import get_geolocation
 import time
 import urllib.parse
 import urllib.request
+import requests # <--- ¡ESTA LÍNEA FALTABA!
 
 # --- 🔗 CONFIGURACIÓN ---
 st.set_page_config(page_title="Pedir Taxi", page_icon="🙋‍♂️", layout="centered")
@@ -33,7 +34,6 @@ if loc and 'coords' in loc:
     lon_cliente = loc['coords']['longitude']
 else:
     # SI NO HAY GPS, USAMOS UNA UBICACIÓN POR DEFECTO PARA QUE NO FALLE LA PRUEBA
-    # (Usamos la misma ubicación del conductor que vimos en tu Excel para que aparezca CERCA)
     st.warning("⚠️ No detecto tu GPS. Usando ubicación de prueba (El Coca).")
     lat_cliente = -0.7265 
     lon_cliente = -76.8705
@@ -52,26 +52,25 @@ def obtener_conductores_activos():
     try:
         sh = client.open_by_key(SHEET_ID)
         
-        # 1. Traer datos de CHOFERES (Para ver Estado y Datos del auto)
+        # 1. Traer datos de CHOFERES
         ws_choferes = sh.worksheet("CHOFERES")
         df_choferes = pd.DataFrame(ws_choferes.get_all_records())
         
-        # 2. Traer datos de UBICACIONES (Para ver Lat/Lon en tiempo real)
+        # 2. Traer datos de UBICACIONES
         ws_ubi = sh.worksheet("UBICACIONES")
         data_ubi = ws_ubi.get_all_values()
         if not data_ubi: return []
-        df_ubi = pd.DataFrame(data_ubi[1:], columns=data_ubi[0]) # Primera fila headers
+        df_ubi = pd.DataFrame(data_ubi[1:], columns=data_ubi[0]) 
         
-        # 3. Limpieza de columnas para evitar errores de espacios
+        # 3. Limpieza
         df_choferes.columns = df_choferes.columns.str.strip()
         df_ubi.columns = df_ubi.columns.str.strip()
 
-        # 4. Unir las dos tablas usando el NOMBRE
-        # Convertimos a mayusculas para asegurar coincidencia
+        # 4. Unir tablas
         df_choferes['Nombre_Completo'] = (df_choferes['Nombre'].astype(str) + " " + df_choferes['Apellido'].astype(str)).str.strip().str.upper()
         df_ubi['Conductor'] = df_ubi['Conductor'].astype(str).str.strip().str.upper()
         
-        # Hacemos el MERGE (Cruce)
+        # Merge
         df_final = pd.merge(df_choferes, df_ubi, left_on='Nombre_Completo', right_on='Conductor', how='inner')
         
         return df_final
@@ -85,7 +84,6 @@ st.title("🙋‍♂️ Pedir Taxi (Modo Prueba)")
 if lat_cliente:
     st.success(f"📍 Tu ubicación detectada: {lat_cliente:.4f}, {lon_cliente:.4f}")
     
-    # Formulario
     with st.form("form_pedido"):
         nombre = st.text_input("Tu Nombre")
         whatsapp = st.text_input("WhatsApp (Sin código)")
@@ -93,12 +91,10 @@ if lat_cliente:
         
         # BUSCAR CONDUCTORES
         df_activos = obtener_conductores_activos()
-        
         conductores_cerca = []
         
         if not df_activos.empty:
             for index, row in df_activos.iterrows():
-                # Verificar que esté LIBRE y VALIDADO
                 estado = str(row.get('Estado', '')).upper()
                 validado = str(row.get('Validado', '')).upper()
                 
@@ -108,7 +104,7 @@ if lat_cliente:
                         lon_cond = float(row['Longitud'])
                         dist = calcular_distancia(lat_cliente, lon_cliente, lat_cond, lon_cond)
                         
-                        # --- ⚠️ AQUÍ ESTÁ EL TRUCO: RADIO GIGANTE (10,000 KM) ---
+                        # RADIO GIGANTE PARA PRUEBAS (10,000 KM)
                         if dist <= 10000: 
                             conductores_cerca.append({
                                 "nombre": row['Nombre_Completo'],
@@ -117,16 +113,13 @@ if lat_cliente:
                                 "distancia": dist,
                                 "tel_conductor": row.get('Telefono', '')
                             })
-                    except:
-                        pass # Error leyendo coordenadas de este chofer
+                    except: pass
         
-        # Ordenar por cercanía
         conductores_cerca.sort(key=lambda x: x['distancia'])
         
         if conductores_cerca:
             st.info(f"✅ Se encontraron {len(conductores_cerca)} conductores disponibles.")
             
-            # Selector de conductor
             opciones = [f"{c['nombre']} ({c['auto']} - {c['placa']}) a {c['distancia']:.1f} km" for c in conductores_cerca]
             seleccion = st.selectbox("Elige tu conductor:", options=opciones)
             
@@ -134,14 +127,11 @@ if lat_cliente:
             
             if enviar:
                 if nombre and whatsapp and referencia:
-                    # Recuperar datos del conductor seleccionado
                     index_sel = opciones.index(seleccion)
                     chofer_elegido = conductores_cerca[index_sel]
                     
-                    # Generar Link Mapa
                     link_mapa = f"https://www.google.com/maps/search/?api=1&query={lat_cliente},{lon_cliente}"
                     
-                    # ENVIAR AL SCRIPT (Para que le llegue al chofer)
                     try:
                         params = {
                             "accion": "registrar_pedido",
@@ -153,9 +143,9 @@ if lat_cliente:
                             "tel_conductor": chofer_elegido['tel_conductor'],
                             "mapa": link_mapa
                         }
+                        # AQUÍ USAMOS REQUESTS QUE YA ESTÁ IMPORTADO
                         requests.post(URL_SCRIPT, params=params)
                         
-                        # CAMBIAR ESTADO CHOFER A OCUPADO
                         requests.post(URL_SCRIPT, params={
                             "accion": "cambiar_estado",
                             "conductor": chofer_elegido['nombre'],
@@ -171,9 +161,7 @@ if lat_cliente:
                 else:
                     st.error("Por favor llena todos los campos.")
         else:
-            # Si no hay conductores (incluso con radio infinito)
             st.warning("⚠️ No hay conductores conectados con estado 'LIBRE'.")
-            st.write("Verifica en el Panel de Conductor que el botón verde 'PONERME LIBRE' esté activo.")
             st.form_submit_button("Actualizar búsqueda")
 
 else:
