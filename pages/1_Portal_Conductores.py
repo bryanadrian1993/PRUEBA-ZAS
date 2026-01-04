@@ -9,7 +9,7 @@ import math
 import os
 import time
 import io
-import re  # <--- IMPORTANTE: Agregamos librería para leer bien el mapa
+import re  # <--- IMPORTANTE: Necesario para leer el mapa correctamente
 from PIL import Image
 from datetime import datetime
 from streamlit_js_eval import get_geolocation
@@ -113,13 +113,14 @@ PAISES = ["Ecuador", "Colombia", "Perú", "México", "España", "Otro"]
 IDIOMAS = ["Español", "English"]
 VEHICULOS = ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔", "Moto Entrega 🏍️"]
 
-# --- 🛰️ CAPTURA GPS ---
+# --- 🛰️ CAPTURA GPS ESTRICTA ---
+# Si no hay GPS real, las variables se quedan en None (no se inventa ubicación)
 loc = get_geolocation()
+lat_actual, lon_actual = None, None
+
 if loc and 'coords' in loc:
     lat_actual = loc['coords']['latitude']
     lon_actual = loc['coords']['longitude']
-else:
-    lat_actual, lon_actual = None, None
 
 # --- 🛠️ FUNCIONES ---
 def cargar_datos(hoja):
@@ -230,12 +231,17 @@ if st.session_state.usuario_activo:
     st.write("---") 
 
     gps_activo = st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True)
-    if gps_activo and lat_actual and lon_actual:
-        res_gps = actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
-        if res_gps:
-            st.success(f"📍 GPS Transmitiendo... ({lat_actual:.4f}, {lon_actual:.4f})")
-    elif not (lat_actual and lon_actual):
-        st.warning("🛰️ Buscando señal de GPS... (Permite ubicación en navegador)")
+    if gps_activo:
+        if lat_actual and lon_actual:
+            # Solo actualizamos si hay coordenadas REALES
+            res_gps = actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
+            if res_gps:
+                st.success(f"📍 GPS Transmitiendo... ({lat_actual:.5f}, {lon_actual:.5f})")
+        else:
+            # Si no hay coordenadas, mostramos aviso de espera
+            st.warning("⏳ Buscando señal satelital... (Asegúrate de permitir la ubicación)")
+    else:
+        st.info("Rastreo desactivado.")
 
     if not fila_actual.empty:
         try:
@@ -351,21 +357,20 @@ if st.session_state.usuario_activo:
             st.write(f"📞 **Tel:** {datos_v.get('Tel Cliente', 'S/D')}")
             st.write(f"📍 **Destino:** {datos_v.get('Referencia', 'S/D')}")
             st.markdown(f"[🗺️ Ver Mapa]({datos_v.get('Mapa', '#')})")
-            
             if st.button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True):
                 with st.spinner("Calculando distancia y actualizando deuda..."):
                     try:
                         link_mapa = str(datos_v.get('Mapa', ''))
                         distancia = 2.0
                         
-                        # --- CORRECCIÓN DE CÁLCULO DE DISTANCIA (AQUÍ ESTABA EL ERROR DE $7.43) ---
+                        # --- 🛠️ CORRECCIÓN DE CÁLCULO DE DISTANCIA (AQUÍ ESTÁ LA SOLUCIÓN) ---
+                        # Usamos REGEX para leer las coordenadas matemáticas exactas
+                        # Esto evita que se borre el signo negativo o se confundan los ceros
                         try:
-                            # Usamos Expresiones Regulares para extraer lat/lon limpiamente
-                            # Esto evita que los prefijos del mapa (como '2' o '0') arruinen el número
                             numeros = re.findall(r'-?\d+\.\d+', link_mapa)
                             if len(numeros) >= 2:
-                                lat_cli = float(numeros[-2]) # Penúltimo número es Lat
-                                lon_cli = float(numeros[-1]) # Último número es Lon
+                                lat_cli = float(numeros[-2])
+                                lon_cli = float(numeros[-1])
                                 
                                 dLat = math.radians(lat_actual - lat_cli)
                                 dLon = math.radians(lon_actual - lon_cli)
@@ -373,14 +378,12 @@ if st.session_state.usuario_activo:
                                     math.cos(math.radians(lat_actual)) * math.sin(dLon/2)**2
                                 c = 2 * math.asin(math.sqrt(a))
                                 distancia = 6371 * c 
-                        except: 
-                            pass # Si falla, usa distancia 2.0 por defecto
+                        except: pass
                         
-                        # Lógica de cobro: Mínimo 1km ($0.05)
                         if distancia < 1.0: distancia = 1.0
                         comision_nueva = round(distancia * TARIFA_POR_KM, 2)
                         
-                        res = enviar_datos_a_sheets({
+                        res = enviar_datos({
                             "accion": "finalizar_y_deuda",
                             "conductor": nombre_completo_unificado,
                             "comision": comision_nueva,
