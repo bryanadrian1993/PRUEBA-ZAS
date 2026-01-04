@@ -15,7 +15,7 @@ import base64
 # --- ⚙️ CONFIGURACIÓN DEL SISTEMA ---
 st.set_page_config(page_title="TAXI SEGURO", page_icon="🚖", layout="centered")
 
-# AUTO-REFRESCO: Actualiza siempre cada 5 segundos para buscar GPS e intentar conectar
+# AUTO-REFRESCO: Se ejecuta SIEMPRE para actualizar el GPS
 st_autorefresh(interval=5000, key="client_refresh")
 
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
