@@ -37,16 +37,20 @@ LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO"
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
 
-# --- FUNCIÓN DE PAGO PAYPAL (Visualización Bloqueo) ---
-def mostrar_boton_pago():
+# --- FUNCIÓN DE PAGO PAYPAL (Modificada para cobrar deuda total) ---
+def mostrar_boton_pago(monto_deuda):
     st.header("🔓 Desbloqueo Automático (PayPal)")
-    st.write("Paga tu suscripción y tu cuenta se activará al instante.")
-    cedula_conductor = st.text_input("Ingresa tu número de Cédula para pagar:", max_chars=10)
+    st.warning(f"Tu deuda es de **${monto_deuda:.2f}**. Debes pagarla completa para desbloquearte.")
+    
+    # CAMBIO: Etiqueta de identificación
+    cedula_conductor = st.text_input("Ingresa tu número de identificación:", max_chars=15)
+    
     if cedula_conductor:
         client_id = "AS96Gq4_mueF7i7xjUzx2nEgYSmiS6t69datLVrPMwxDIxboQC00sZf7TBM6KwkRxUL92ys0I-JXXq_y"
-        valor_a_pagar = "5.00"
         
-        # HTML Corregido para móviles
+        # CAMBIO: El valor a pagar es la deuda total exacta
+        valor_a_pagar = f"{monto_deuda:.2f}"
+        
         _html = f"""
         <!DOCTYPE html>
         <html>
@@ -79,7 +83,7 @@ def mostrar_boton_pago():
                     }},
                     onApprove: function(data, actions) {{
                         return actions.order.capture().then(function(details) {{
-                            alert('¡Pago Exitoso! Tu cuenta se está desbloqueando...');
+                            alert('¡Pago de ${valor_a_pagar} Exitoso! Tu cuenta se está desbloqueando...');
                         }});
                     }}
                 }}).render('#paypal-container');
@@ -87,10 +91,10 @@ def mostrar_boton_pago():
         </body>
         </html>
         """
-        st.caption(f"Total a pagar: ${valor_a_pagar}")
+        st.caption(f"Total a pagar para desbloqueo: ${valor_a_pagar}")
         components.html(_html, height=650, scrolling=True)
     else:
-        st.info("👆 Escribe tu cédula para ver el botón de pago.")
+        st.info("👆 Escribe tu identificación para ver el botón de pago.")
 
 def enviar_datos_requests(params):
     try:
@@ -228,7 +232,8 @@ if st.session_state.usuario_activo:
 
         if deuda_actual >= DEUDA_MAXIMA:
             st.error(f"⚠️ TU CUENTA ESTÁ BLOQUEADA. Debes: ${deuda_actual}")
-            mostrar_boton_pago()
+            # CAMBIO: Pasamos el monto de la deuda a la función
+            mostrar_boton_pago(deuda_actual)
         
         col_m1, col_m2 = st.columns(2)
         col_m1.metric("💸 Deuda Actual", f"${deuda_actual:.2f}")
@@ -260,6 +265,7 @@ if st.session_state.usuario_activo:
             tab_qr, tab_paypal = st.tabs(["📲 Transferencia/QR", "💳 Tarjeta / PayPal"])
             with tab_paypal:
                 st.subheader("🌎 Pagar con PayPal")
+                # Si no está bloqueado, sugerimos pagar todo o mínimo 5
                 sugerencia = float(deuda_actual) if deuda_actual > 0 else 5.00
                 st.write("Confirma o escribe la cantidad a pagar:")
                 monto_final = st.number_input("Monto a Pagar ($):", min_value=1.00, value=sugerencia, step=1.00)
@@ -297,7 +303,7 @@ if st.session_state.usuario_activo:
                                 color:  'gold',
                                 shape:  'rect',
                                 label:  'pay',
-                                disableMaxWidth: true  // <--- ESTA LÍNEA ES LA CLAVE PARA VER TODOS LOS CAMPOS
+                                disableMaxWidth: true  
                             }},
                             createOrder: function(data, actions) {{
                                 return actions.order.create({{
