@@ -15,16 +15,11 @@ import base64
 # --- ⚙️ CONFIGURACIÓN DEL SISTEMA ---
 st.set_page_config(page_title="TAXI SEGURO", page_icon="🚖", layout="centered")
 
-# AUTO-REFRESCO: Actualiza la app cada 10 segundos
-if st.session_state.get('viaje_confirmado', False):
-    st_autorefresh(interval=10000, key="datarefresh")
+# AUTO-REFRESCO: Actualiza siempre cada 5 segundos para buscar GPS e intentar conectar
+st_autorefresh(interval=5000, key="client_refresh")
 
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
-
-# --- 📍 CORRECCIÓN 1: COORDENADAS BASE (EL COCA) ---
-# Si el GPS falla, usamos la posición de tu chofer para que la prueba no falle.
-LAT_BASE, LON_BASE = -0.6685, -76.8737 
 
 if 'viaje_confirmado' not in st.session_state: st.session_state.viaje_confirmado = False
 if 'datos_pedido' not in st.session_state: st.session_state.datos_pedido = {}
@@ -44,14 +39,12 @@ st.markdown("""
 # --- 🛠️ FUNCIONES ---
 
 def calcular_distancia_real(lat1, lon1, lat2, lon2):
-    """Calcula la distancia en KM entre dos puntos (Haversine)."""
     R = 6371
     dlat, dlon = math.radians(lat2-lat1), math.radians(lon2-lon1)
     a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
     return 2 * math.atan2(math.sqrt(a), math.sqrt(1-a)) * R
 
 def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
-    """Consulta OSRM para trazar el camino."""
     try:
         url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
         with urllib.request.urlopen(url, timeout=4) as response:
@@ -62,7 +55,6 @@ def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
 
 def cargar_datos(hoja):
     try:
-        # Cache busting para asegurar datos frescos
         cb = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cb}"
         df = pd.read_csv(url)
@@ -78,20 +70,16 @@ def enviar_datos_a_sheets(datos):
     except Exception as e: return f"Error: {e}"
 
 def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
-    # 1. Cargar ambas tablas
     df_c = cargar_datos("CHOFERES")
     df_u = cargar_datos("UBICACIONES")
     
     if df_c.empty or df_u.empty: return None, None, None, "S/P"
     
-    # 2. Normalizar columnas
     df_c.columns = df_c.columns.str.strip().str.upper()
     df_u.columns = df_u.columns.str.strip() 
     
-    # 3. Filtrar conductores LIBRES y por TIPO
     tipo_b = tipo_sol.split(" ")[0].upper()
     
-    # Asegurar que existan las columnas
     if 'ESTADO' not in df_c.columns or 'TIPO_VEHICULO' not in df_c.columns:
         return None, None, None, "Error Columnas"
 
@@ -100,22 +88,17 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
         (df_c['TIPO_VEHICULO'].astype(str).str.upper().str.contains(tipo_b))
     ]
 
-    # 4. Filtro de DEUDA (Opcional)
     if 'DEUDA' in libres.columns:
         libres = libres[pd.to_numeric(libres['DEUDA'], errors='coerce').fillna(0) < 10.00]
 
     if libres.empty: return None, None, None, "S/P"
 
-    # 5. Buscar el más cercano
     mejor_chofer = None
     menor_distancia = float('inf')
 
-    # Preparar datos de ubicación para búsqueda rápida
-    # Asumimos que UBICACIONES tiene col 'Conductor'
     if 'Conductor' in df_u.columns:
         df_u['Conductor_Clean'] = df_u['Conductor'].astype(str).str.strip().str.upper()
     else:
-        # Intenta buscar la columna si tiene otro nombre (ej: CONDUCTOR)
         cols_posibles = [c for c in df_u.columns if "CONDUCTOR" in c.upper()]
         if cols_posibles:
             df_u['Conductor_Clean'] = df_u[cols_posibles[0]].astype(str).str.strip().str.upper()
@@ -123,18 +106,14 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
             return None, None, None, "Error Ubi Cols"
 
     for _, conductor in libres.iterrows():
-        # Construir nombre completo del conductor de la hoja CHOFERES
         nom = str(conductor.get('NOMBRE', '')).strip()
         ape = str(conductor.get('APELLIDO', '')).strip()
         nombre_completo = f"{nom} {ape}".strip().upper()
 
-        # Buscar este nombre en UBICACIONES
-        # Tomamos el último registro (iloc[-1])
         ubi_match = df_u[df_u['Conductor_Clean'] == nombre_completo]
         
         if not ubi_match.empty:
             try:
-                # Intenta leer Latitud/Longitud (Ajusta nombres si tu Excel es diferente)
                 lat_idx = [c for c in ubi_match.columns if "LAT" in c.upper()][0]
                 lon_idx = [c for c in ubi_match.columns if "LON" in c.upper()][0]
                 
@@ -143,8 +122,6 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
                 
                 dist = calcular_distancia_real(lat_cli, lon_cli, lat_cond, lon_cond)
                 
-                # --- CORRECCIÓN 2: RADIO DE BÚSQUEDA AUMENTADO ---
-                # Cambiado de 10 a 10000 km para que SIEMPRE encuentre al conductor en pruebas
                 if dist < 10000 and dist < menor_distancia:
                     menor_distancia = dist
                     mejor_chofer = conductor
@@ -163,13 +140,16 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
 st.markdown('<div class="main-title">🚖 TAXI SEGURO</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">🌎 SERVICIO GLOBAL</div>', unsafe_allow_html=True)
 
+# --- CAPTURA DE GPS CLIENTE (SIN FALLBACK) ---
 loc = get_geolocation()
+lat_actual, lon_actual = None, None
+
 if loc and 'coords' in loc:
     lat_actual = loc['coords']['latitude']
     lon_actual = loc['coords']['longitude']
+    st.success(f"📍 Tu Ubicación: {lat_actual:.5f}, {lon_actual:.5f}")
 else:
-    lat_actual, lon_actual = LAT_BASE, LON_BASE
-    st.info("📍 Esperando señal GPS... (Usando ubicación base El Coca por ahora)")
+    st.warning("⚠️ Esperando señal GPS... Por favor permite la ubicación en tu navegador.")
 
 if not st.session_state.viaje_confirmado:
     with st.form("form_pedido"):
@@ -179,62 +159,64 @@ if not st.session_state.viaje_confirmado:
         tipo_veh = st.selectbox("¿Qué necesitas?", ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔"])
         enviar = st.form_submit_button("🚖 SOLICITAR UNIDAD")
 
-    if enviar and nombre_cli and ref_cli:
-        with st.spinner("🔄 Buscando unidad cercana..."):
-            chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
-            
-            if chof is not None:
-                n_limpio = str(chof['NOMBRE']).strip()
-                a_limpio = str(chof['APELLIDO']).strip()
-                if a_limpio.lower() == "nan": a_limpio = ""
-                nombre_chof = f"{n_limpio} {a_limpio}".strip().upper()
+    if enviar:
+        if not (nombre_cli and ref_cli and lat_actual):
+            if not lat_actual:
+                st.error("🚫 ERROR: No tenemos tu ubicación GPS. Revisa permisos.")
+            else:
+                st.error("Llena todos los campos.")
+        else:
+            with st.spinner("🔄 Buscando unidad cercana..."):
+                chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
                 
-                id_v = f"TX-{random.randint(1000, 9999)}"
-                # Enviar mapa limpio (sin prefijos) para evitar el error de $7.43 en el futuro
-                mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
-                
-                # 1. Registrar Pedido
-                res_pedido = enviar_datos_a_sheets({
-                    "accion": "registrar_pedido",
-                    "id_viaje": id_v,
-                    "cliente": nombre_cli,
-                    "tel_cliente": celular_input,
-                    "referencia": ref_cli,
-                    "conductor": nombre_chof,
-                    "tel_conductor": t_chof,
-                    "mapa": mapa_url
-                })
-                
-                if "Registrado" in str(res_pedido) or "Ok" in str(res_pedido):
-                    # 2. Cambiar estado a OCUPADO
-                    enviar_datos_a_sheets({
-                        "accion": "cambiar_estado", 
-                        "conductor": nombre_chof, 
-                        "estado": "OCUPADO"
+                if chof is not None:
+                    n_limpio = str(chof['NOMBRE']).strip()
+                    a_limpio = str(chof['APELLIDO']).strip()
+                    if a_limpio.lower() == "nan": a_limpio = ""
+                    nombre_chof = f"{n_limpio} {a_limpio}".strip().upper()
+                    
+                    id_v = f"TX-{random.randint(1000, 9999)}"
+                    mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
+                    
+                    res_pedido = enviar_datos_a_sheets({
+                        "accion": "registrar_pedido",
+                        "id_viaje": id_v,
+                        "cliente": nombre_cli,
+                        "tel_cliente": celular_input,
+                        "referencia": ref_cli,
+                        "conductor": nombre_chof,
+                        "tel_conductor": t_chof,
+                        "mapa": mapa_url
                     })
                     
-                    st.success(f"✅ ¡Conductor encontrado! {n_limpio} va en camino.")
-                    st.session_state.viaje_confirmado = True
-                    st.session_state.datos_pedido = {
-                        "chof": nombre_chof, "t_chof": t_chof, "foto": foto_chof, 
-                        "placa": placa, "id": id_v, "mapa": mapa_url, 
-                        "lat_cli": lat_actual, "lon_cli": lon_actual, 
-                        "nombre": nombre_cli, "ref": ref_cli
-                    }
-                    import time
-                    time.sleep(2)
-                    st.rerun()
+                    if "Registrado" in str(res_pedido) or "Ok" in str(res_pedido):
+                        enviar_datos_a_sheets({
+                            "accion": "cambiar_estado", 
+                            "conductor": nombre_chof, 
+                            "estado": "OCUPADO"
+                        })
+                        
+                        st.success(f"✅ ¡Conductor encontrado! {n_limpio} va en camino.")
+                        st.session_state.viaje_confirmado = True
+                        st.session_state.datos_pedido = {
+                            "chof": nombre_chof, "t_chof": t_chof, "foto": foto_chof, 
+                            "placa": placa, "id": id_v, "mapa": mapa_url, 
+                            "lat_cli": lat_actual, "lon_cli": lon_actual, 
+                            "nombre": nombre_cli, "ref": ref_cli
+                        }
+                        import time
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Error al registrar pedido: {res_pedido}")
                 else:
-                    st.error(f"❌ Error al registrar pedido: {res_pedido}")
-            else:
-                 st.warning("⚠️ No hay conductores disponibles cerca de tu ubicación en este momento.")
+                     st.warning("⚠️ No hay conductores disponibles cerca de tu ubicación.")
 
 if st.session_state.viaje_confirmado:
     dp = st.session_state.datos_pedido
     
     st.markdown(f'<div style="text-align:center;"><span class="id-badge">🆔 ID: {dp["id"]}</span></div>', unsafe_allow_html=True)
     
-    # Foto Conductor
     foto_data = dp.get('foto', "SIN_FOTO")
     st.markdown('<div style="text-align:center; margin-bottom:15px;">', unsafe_allow_html=True)
     if foto_data and len(str(foto_data)) > 100:
@@ -259,15 +241,12 @@ if st.session_state.viaje_confirmado:
 
     st.write("---")
 
-    # MAPA DE SEGUIMIENTO EN VIVO
     try:
         df_u = cargar_datos("UBICACIONES")
         
-        # Buscar ubicación usando nombre normalizado
         if 'Conductor' in df_u.columns:
              df_u['Conductor_Clean'] = df_u['Conductor'].astype(str).str.strip().str.upper()
         else:
-             # Fallback si la columna se llama diferente
              col_name = [c for c in df_u.columns if "CONDUCTOR" in c.upper()][0]
              df_u['Conductor_Clean'] = df_u[col_name].astype(str).str.strip().str.upper()
 
@@ -275,7 +254,6 @@ if st.session_state.viaje_confirmado:
         
         if not pos_t.empty:
             pos_t = pos_t.iloc[-1]
-            # Busqueda dinamica de columnas Lat/Lon
             lat_col = [c for c in df_u.columns if "LAT" in c.upper()][0]
             lon_col = [c for c in df_u.columns if "LON" in c.upper()][0]
             
