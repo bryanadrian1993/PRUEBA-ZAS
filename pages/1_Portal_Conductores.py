@@ -34,7 +34,6 @@ except Exception as e:
 TARIFA_POR_KM = 0.05
 DEUDA_MAXIMA = 10.00
 LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO"
-# ID CONFIRMADO DE TU IMAGEN:
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
 
@@ -249,64 +248,66 @@ if st.session_state.usuario_activo:
                 monto_final = st.number_input("Monto a Pagar ($):", min_value=1.00, value=sugerencia, step=1.00)
                 cedula_usuario = str(fila_actual.iloc[0, 0]) 
                 client_id = "AbTSfP381kOrNXmRJO8SR7IvjtjLx0Qmj1TyERiV5RzVheYAAxvgGWHJam3KE_iyfcrf56VV_k-MPYmv"
+                
+                # --- CÓDIGO HTML CORREGIDO Y OPTIMIZADO PARA MOSTRAR CAMPOS ---
                 paypal_html_tab = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1">
-                <style>
-                    html, body {{
-                        height: 100%;
-                        margin: 0;
-                        padding: 0;
-                        overflow: auto;
-                    }}
-                    #paypal-button-container-final {{
-                        min-height: 600px;
-                        padding: 20px;
-                        width: 100%;
-                    }}
-                </style>
-            </head>
-            <body>
-                <div id="paypal-button-container-final"></div>
-
-                <script src="https://www.paypal.com/sdk/js?client-id={client_id}&currency=USD&components=buttons"></script>
-
-                <script>
-                    paypal.Buttons({{
-                        style: {{
-                            layout: 'vertical',
-                            color:  'gold',
-                            shape:  'rect',
-                            label:  'pay',
-                            height: 45
-                        }},
-                        createOrder: function(data, actions) {{
-                            return actions.order.create({{
-                                purchase_units: [{{
-                                    amount: {{ value: '{monto_final}' }},
-                                    custom_id: '{cedula_usuario}' 
-                                }}]
-                            }});
-                        }},
-                        onApprove: function(data, actions) {{
-                            return actions.order.capture().then(function(details) {{
-                                alert('✅ Pago exitoso de ${monto_final}.');
-                            }});
-                        }},
-                        onError: function (err) {{
-                            console.error('Error:', err);
-                            alert('No se pudo cargar el formulario. Intenta recargar la página.');
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1">
+                    <style>
+                        html, body {{
+                            height: 100%;
+                            margin: 0;
+                            padding: 0;
+                            overflow: auto;
                         }}
-                    }}).render('#paypal-button-container-final');
-                </script>
-            </body>
-            </html>
-            """
-            components.html(paypal_html_tab, height=650, scrolling=True)
-            
-            if deuda_actual >= DEUDA_MAXIMA:
+                        #paypal-button-container-final {{
+                            min-height: 600px;
+                            padding: 20px;
+                            width: 100%;
+                        }}
+                    </style>
+                </head>
+                <body>
+                    <div id="paypal-button-container-final"></div>
+                    <script src="https://www.paypal.com/sdk/js?client-id={client_id}&currency=USD&components=buttons"></script>
+                    <script>
+                        paypal.Buttons({{
+                            style: {{
+                                layout: 'vertical',
+                                color:  'gold',
+                                shape:  'rect',
+                                label:  'pay',
+                                height: 45,
+                                disableMaxWidth: true
+                            }},
+                            createOrder: function(data, actions) {{
+                                return actions.order.create({{
+                                    purchase_units: [{{
+                                        amount: {{ value: '{monto_final}' }},
+                                        custom_id: '{cedula_usuario}' 
+                                    }}]
+                                }});
+                            }},
+                            onApprove: function(data, actions) {{
+                                return actions.order.capture().then(function(details) {{
+                                    alert('✅ Pago exitoso de ${monto_final}.');
+                                }});
+                            }},
+                            onError: function (err) {{
+                                console.error('Error:', err);
+                                alert('No se pudo cargar el formulario. Intenta recargar la página.');
+                            }}
+                        }}).render('#paypal-button-container-final');
+                    </script>
+                </body>
+                </html>
+                """
+                
+                components.html(paypal_html_tab, height=650, scrolling=True)
+                
+                if deuda_actual >= DEUDA_MAXIMA:
                     minimo_para_desbloqueo = deuda_actual - DEUDA_MAXIMA + 0.01
                     st.error(f"⚠️ CUENTA BLOQUEADA (Deuda: ${deuda_actual}).")
                     st.info(f"💡 Para desbloquearte, debes pagar al menos: **${minimo_para_desbloqueo:.2f}**")
@@ -464,7 +465,6 @@ else:
             st.write("📷 **Foto de Perfil** (Opcional)")
             archivo_foto_reg = st.file_uploader("Sube tu foto", type=["jpg", "png", "jpeg"])
             
-            # --- GUARDAR EN PESTAÑA 'CHOFERES' ---
             if st.form_submit_button("✅ COMPLETAR REGISTRO"):
                 if r_nom and r_email and r_pass1:
                     foto_para_guardar = "SIN_FOTO"
@@ -481,10 +481,7 @@ else:
                     try:
                         with st.spinner("Conectando con Excel..."):
                             sh = client.open_by_key(SHEET_ID)
-                            # AQUÍ ESTÁ EL CAMBIO IMPORTANTE:
-                            # Buscamos la hoja por nombre exacto "CHOFERES"
                             wks = sh.worksheet("CHOFERES")
-
                             nueva_fila = [
                                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 r_nom,
