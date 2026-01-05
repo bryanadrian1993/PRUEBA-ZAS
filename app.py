@@ -32,9 +32,12 @@ if 'ultima_lat' not in st.session_state:
     st.session_state.ultima_lat = None
 if 'ultima_lon' not in st.session_state:
     st.session_state.ultima_lon = None
+if 'debug_mode' not in st.session_state:
+    st.session_state.debug_mode = False
 
-# --- CORRECCIÓN CRÍTICA: Auto-refresh SOLO cuando NO hay viaje confirmado ---
-if not st.session_state.viaje_confirmado:
+# --- DESACTIVAR AUTO-REFRESH EN MODO DEBUG ---
+# Solo refresca si NO está en debug y NO hay viaje confirmado
+if not st.session_state.debug_mode and not st.session_state.viaje_confirmado:
     st_autorefresh(interval=5000, key="gps_refresh")
 
 # 🎨 ESTILOS CSS
@@ -311,6 +314,9 @@ if not st.session_state.viaje_confirmado:
         else:
             # PROCESAR SOLICITUD
             st.info("✅ Validaciones OK - Buscando conductor...")
+            
+            # ACTIVAR MODO DEBUG para detener auto-refresh
+            st.session_state.debug_mode = True
             
             with st.spinner("🔍 Buscando conductor disponible..."):
                 chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
