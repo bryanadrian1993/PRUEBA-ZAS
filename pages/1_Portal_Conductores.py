@@ -261,16 +261,23 @@ if st.session_state.usuario_activo:
         estado_actual = str(fila_actual.iloc[0].get('Estado', 'OCUPADO'))
         
         if deuda_actual >= DEUDA_MAXIMA and "LIBRE" in estado_actual.upper():
-            # Solo mostramos un aviso pequeño, sin bloquear la pantalla
-            st.toast("⚠️ Deuda detectada: Cambiando estado a OCUPADO...", icon="🔒")
+            st.toast("🔒 Deuda detectada: Bloqueando en Excel...", icon="🚫")
             
-            # 1. Mandamos la orden a Excel en silencio
-            enviar_datos({
-                "accion": "actualizar_estado", 
-                "nombre": user_nom, 
-                "apellido": user_ape, 
-                "estado": "OCUPADO"
-            })
+            # --- NUEVO: ESCRITURA DIRECTA EN EXCEL (INFALIBLE) ---
+            try:
+                # 1. Calculamos la fila exacta en Excel usando el índice que ya encontró la App
+                indice_pandas = fila_actual.index[0] 
+                fila_excel = indice_pandas + 2  # (+2 porque Excel tiene encabezado y empieza en 1)
+                
+                # 2. Conectamos y escribimos directo en la celda
+                sh_lock = client.open_by_key(SHEET_ID)
+                wks_lock = sh_lock.worksheet("CHOFERES")
+                wks_lock.update_cell(fila_excel, 9, "OCUPADO") # La columna 9 es la "I" (Estado)
+            except Exception as e:
+                st.error(f"Error escribiendo en Excel: {e}")
+            # -----------------------------------------------------
+
+            # Forzamos el cambio visual en la App inmediatamente
             estado_actual = "OCUPADO"
         if deuda_actual >= DEUDA_MAXIMA:
             st.error(f"⚠️ TU CUENTA ESTÁ BLOQUEADA. Debes: ${deuda_actual}")
