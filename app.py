@@ -104,23 +104,70 @@ def enviar_datos_a_sheets(datos):
         return f"Error: {str(e)}"
 
 def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
-    st.write("="*50)
-    st.write("🔍 INICIANDO BÚSQUEDA DE CONDUCTOR")
-    st.write("="*50)
+    # Nota: He quitado los st.write para que no salgan letras en pantalla
     
     df_c = cargar_datos("CHOFERES")
     df_u = cargar_datos("UBICACIONES")
     
-    st.write(f"📊 CHOFERES cargados: {len(df_c)} filas")
-    st.write(f"📍 UBICACIONES cargadas: {len(df_u)} filas")
+    if df_c.empty or df_u.empty:
+        return None, None, None, "Error Datos"
     
-    if df_c.empty:
-        st.error("❌ Hoja CHOFERES está vacía")
-        return None, None, None, "S/P"
+    tipo_b = tipo_sol.split(" ")[0].upper()
+
+    # FILTRO 1: Solo conductores LIBRES
+    libres = df_c[df_c['ESTADO'].astype(str).str.upper().str.strip() == 'LIBRE']
     
-    if df_u.empty:
-        st.error("❌ Hoja UBICACIONES está vacía")
-        return None, None, None, "S/P"
+    # Si no hay libres, buscamos en todos (Modo Emergencia silencioso)
+    if len(libres) == 0:
+        libres = df_c.copy()
+    
+    # FILTRO 2: Tipo de vehículo
+    if 'TIPO_VEHICULO' in libres.columns:
+        libres = libres[libres['TIPO_VEHICULO'].astype(str).str.upper().str.contains(tipo_b, na=False)]
+        if len(libres) == 0:
+            libres = df_c.copy() # Fallback si no hay del tipo exacto
+
+    # Preparar columnas
+    col_cond_u = next((c for c in df_u.columns if "CONDUCTOR" in c.upper()), None)
+    col_lat_u = next((c for c in df_u.columns if "LAT" in c.upper()), None)
+    col_lon_u = next((c for c in df_u.columns if "LON" in c.upper()), None)
+
+    if not (col_cond_u and col_lat_u and col_lon_u):
+        return None, None, None, "Error Cols"
+
+    df_u['KEY_CLEAN'] = df_u[col_cond_u].astype(str).str.strip().str.upper()
+    
+    mejor_chofer = None
+    menor_distancia = float('inf')
+
+    # Bucle de búsqueda silencioso
+    for idx, chofer in libres.iterrows():
+        n = str(chofer.get('NOMBRE', '')).replace('nan','').strip()
+        a = str(chofer.get('APELLIDO', '')).replace('nan','').strip()
+        nombre_completo = f"{n} {a}".strip().upper()
+        
+        ubi = df_u[df_u['KEY_CLEAN'] == nombre_completo]
+        
+        if not ubi.empty:
+            try:
+                lat_cond = float(ubi.iloc[-1][col_lat_u])
+                lon_cond = float(ubi.iloc[-1][col_lon_u])
+                d = calcular_distancia_real(lat_cli, lon_cli, lat_cond, lon_cond)
+                
+                # Radio de búsqueda: 10km
+                if d < 10 and d < menor_distancia:
+                    menor_distancia = d
+                    mejor_chofer = chofer
+            except:
+                continue
+
+    if mejor_chofer is not None:
+        t = str(mejor_chofer.get('TELEFONO', '0000000000')).split('.')[0].strip()
+        foto = str(mejor_chofer.get('FOTO_PERFIL', 'SIN_FOTO'))
+        placa = str(mejor_chofer.get('PLACA', 'S/P'))
+        return mejor_chofer, t, foto, placa
+    
+    return None, None, None, "S/P"
     
     # Mostrar columnas
     st.write("📋 Columnas en CHOFERES:")
@@ -301,43 +348,29 @@ if not st.session_state.viaje_confirmado:
         enviar = st.form_submit_button("🚖 SOLICITAR UNIDAD", use_container_width=True)
 
     if enviar:
-        # DEBUG: Mostrar estado del formulario
-        st.info(f"🔍 DEBUG: Formulario enviado | GPS: {lat_actual is not None}")
-        
-        # Validaciones
+        # Validaciones básicas
         if not nombre_cli or not ref_cli:
-            st.error("❌ Por favor completa todos los campos obligatorios")
+            st.error("❌ Por favor completa nombre y referencia.")
         elif not celular_input or len(celular_input) < 7:
-            st.error("❌ Ingresa un número de WhatsApp válido")
-        elif not lat_actual or not lon_actual:
-            st.error("🚫 Aún no tenemos tu ubicación GPS. Espera unos segundos y vuelve a intentar.")
+            st.error("❌ Ingresa un WhatsApp válido.")
+        elif not lat_actual:
+            st.error("🚫 Sin señal GPS. Espera un momento.")
         else:
-            # PROCESAR SOLICITUD
-            st.info("✅ Validaciones OK - Buscando conductor...")
-            
-            # ACTIVAR MODO DEBUG para detener auto-refresh
-            st.session_state.debug_mode = True
-            
-            with st.spinner("🔍 Buscando conductor disponible..."):
+            # ✅ AQUÍ ESTÁ EL TRUCO: Un spinner visual
+            with st.spinner("🔄 Conectando con la central y buscando chofer..."):
+                
+                # 1. Buscamos chofer (ahora sin letras raras)
                 chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
                 
-                # DEBUG: Mostrar resultado de búsqueda
-                st.write(f"🔍 DEBUG - Chofer encontrado: {chof is not None}")
-                
                 if chof is not None:
-                    # Limpieza de datos del conductor
                     n_clean = str(chof.get('NOMBRE', '')).replace('nan','').strip()
                     a_clean = str(chof.get('APELLIDO', '')).replace('nan','').strip()
                     nombre_chof = f"{n_clean} {a_clean}".strip().upper()
                     
-                    st.write(f"✅ Conductor seleccionado: {nombre_chof}")
-                    
                     id_v = f"TX-{random.randint(1000, 9999)}"
                     mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
                     
-                    # 1. Registrar Pedido
-                    st.write("📝 Registrando pedido en Google Sheets...")
-                    
+                    # 2. Registrar Pedido
                     datos_envio = {
                         "accion": "registrar_pedido",
                         "id_viaje": id_v,
@@ -349,97 +382,37 @@ if not st.session_state.viaje_confirmado:
                         "mapa": mapa_url
                     }
                     
-                    st.write(f"📤 Datos a enviar: {datos_envio}")
+                    enviar_datos_a_sheets(datos_envio)
                     
-                    res_pedido = enviar_datos_a_sheets(datos_envio)
+                    # 3. Cambiar estado conductor
+                    enviar_datos_a_sheets({
+                        "accion": "cambiar_estado", 
+                        "conductor": nombre_chof, 
+                        "estado": "OCUPADO"
+                    })
                     
-                    st.write(f"📥 RESPUESTA DE SHEETS: `{res_pedido}`")
-                    st.write(f"📏 Longitud respuesta: {len(str(res_pedido))} caracteres")
+                    # 4. Guardar sesión y FINALIZAR
+                    st.session_state.datos_pedido = {
+                        "chof": nombre_chof, 
+                        "t_chof": t_chof, 
+                        "foto": foto_chof, 
+                        "placa": placa, 
+                        "id": id_v, 
+                        "mapa": mapa_url, 
+                        "lat_cli": lat_actual, 
+                        "lon_cli": lon_actual, 
+                        "nombre": nombre_cli, 
+                        "ref": ref_cli
+                    }
+                    st.session_state.viaje_confirmado = True
                     
-                    # 2. SIMPLIFICAR VALIDACIÓN - Aceptar CUALQUIER respuesta que no sea error
-                    es_error = (
-                        "error" in str(res_pedido).lower() or
-                        "failed" in str(res_pedido).lower() or
-                        "falló" in str(res_pedido).lower()
-                    )
+                    # Mensaje de éxito rápido y recarga inmediata
+                    st.success("✅ ¡Conductor Encontrado!")
+                    time.sleep(1) # Solo 1 segundo para leer
+                    st.rerun()    # Recarga obligatoria
                     
-                    respuesta_ok = not es_error
-                    
-                    st.write(f"✔️ Respuesta válida: {respuesta_ok} (es_error: {es_error})")
-                    
-                    if respuesta_ok:
-                        st.success("✅ PEDIDO REGISTRADO EXITOSAMENTE")
-                        
-                        # Cambiar estado del conductor
-                        st.write("🔄 Cambiando estado del conductor...")
-                        res_estado = enviar_datos_a_sheets({
-                            "accion": "cambiar_estado", 
-                            "conductor": nombre_chof, 
-                            "estado": "OCUPADO"
-                        })
-                        st.write(f"Estado actualizado: {res_estado}")
-                        
-                        # Guardar datos del viaje
-                        st.write("💾 Guardando datos en session_state...")
-                        
-                        st.session_state.datos_pedido = {
-                            "chof": nombre_chof, 
-                            "t_chof": t_chof, 
-                            "foto": foto_chof, 
-                            "placa": placa, 
-                            "id": id_v, 
-                            "mapa": mapa_url, 
-                            "lat_cli": lat_actual, 
-                            "lon_cli": lon_actual, 
-                            "nombre": nombre_cli, 
-                            "ref": ref_cli
-                        }
-                        
-                        st.write("✅ Datos guardados. Activando viaje...")
-                        st.session_state.viaje_confirmado = True
-                        
-                        st.write(f"🎯 Estado viaje_confirmado: {st.session_state.viaje_confirmado}")
-                        
-                        st.balloons()
-                        st.success("🎉 ¡TODO LISTO! Recargando página...")
-                        
-                        # Esperar 2 segundos antes de recargar
-                        import time
-                        time.sleep(2)
-                        
-                        # Forzar recarga
-                        st.rerun()
-                    else:
-                        st.error(f"❌ Error al registrar pedido")
-                        st.error(f"Respuesta recibida: `{res_pedido}`")
-                        st.warning("💡 Verifica que tu Google Apps Script esté funcionando correctamente")
-                        
-                        # MODO DE EMERGENCIA
-                        st.divider()
-                        st.info("🆘 **MODO DE EMERGENCIA ACTIVADO**")
-                        st.write("Puedes continuar de todos modos para probar la interfaz:")
-                        
-                        if st.button("⚠️ CONTINUAR SIN REGISTRO (Solo prueba)", type="primary"):
-                            st.session_state.datos_pedido = {
-                                "chof": nombre_chof, 
-                                "t_chof": t_chof, 
-                                "foto": foto_chof, 
-                                "placa": placa, 
-                                "id": id_v, 
-                                "mapa": mapa_url, 
-                                "lat_cli": lat_actual, 
-                                "lon_cli": lon_actual, 
-                                "nombre": nombre_cli, 
-                                "ref": ref_cli
-                            }
-                            st.session_state.viaje_confirmado = True
-                            st.rerun()
                 else:
-                    st.warning("⚠️ No hay conductores disponibles")
-                    st.info("Esto puede deberse a:")
-                    st.write("- No hay conductores con estado LIBRE")
-                    st.write("- No hay conductores del tipo solicitado")
-                    st.write("- Todos los conductores están muy lejos")
+                    st.error("⚠️ No hay conductores disponibles cerca. Intenta de nuevo.")
 
 # --- PANTALLA DE VIAJE ACTIVO ---
 else:
