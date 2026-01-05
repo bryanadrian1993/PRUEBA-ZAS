@@ -35,10 +35,7 @@ if 'ultima_lon' not in st.session_state:
 if 'debug_mode' not in st.session_state:
     st.session_state.debug_mode = False
 
-# --- DESACTIVAR AUTO-REFRESH EN MODO DEBUG ---
-# Solo refresca si NO está en debug y NO hay viaje confirmado
-if not st.session_state.debug_mode and not st.session_state.viaje_confirmado:
-    st_autorefresh(interval=5000, key="gps_refresh")
+
 
 # 🎨 ESTILOS CSS
 st.markdown("""
