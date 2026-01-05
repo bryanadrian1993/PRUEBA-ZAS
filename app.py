@@ -349,7 +349,7 @@ if not st.session_state.viaje_confirmado:
         enviar = st.form_submit_button("🚖 SOLICITAR UNIDAD", use_container_width=True)
 
     if enviar:
-        # Validaciones
+        # 1. Validaciones
         if not nombre_cli or not ref_cli:
             st.error("❌ Por favor completa nombre y referencia.")
         elif not celular_input or len(celular_input) < 7:
@@ -357,10 +357,8 @@ if not st.session_state.viaje_confirmado:
         elif not lat_actual:
             st.error("🚫 Sin señal GPS. Espera un momento.")
         else:
-            # Spinner limpio
-            with st.spinner("🔄 Conectando con la central..."):
-                
-                # 1. Buscamos chofer
+            with st.spinner("🔄 Confirmando viaje..."):
+                # 2. Buscar Chofer
                 chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
                 
                 if chof is not None:
@@ -368,56 +366,37 @@ if not st.session_state.viaje_confirmado:
                     n_clean = str(chof.get('NOMBRE', '')).replace('nan','').strip()
                     a_clean = str(chof.get('APELLIDO', '')).replace('nan','').strip()
                     nombre_chof = f"{n_clean} {a_clean}".strip().upper()
-                    
                     id_v = f"TX-{random.randint(1000, 9999)}"
                     mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
-                    
-                    # 2. Registrar en Sheets (INTENTO ROBUSTO)
-                    # Usamos try/except para que si Sheets tarda, la app no explote
-                    try:
-                        # A) Registrar el viaje
-                        enviar_datos_a_sheets({
-                            "accion": "registrar_pedido",
-                            "id_viaje": id_v,
-                            "cliente": nombre_cli,
-                            "tel_cliente": celular_input,
-                            "referencia": ref_cli,
-                            "conductor": nombre_chof,
-                            "tel_conductor": t_chof,
-                            "mapa": mapa_url
-                        })
-                        
-                        # B) Poner al chofer OCUPADO (ESTA ES LA LÍNEA QUE FALTABA)
-                        enviar_datos_a_sheets({
-                            "accion": "cambiar_estado", 
-                            "conductor": nombre_chof, 
-                            "estado": "OCUPADO"
-                        })
-                    except Exception as e:
-                        # Si falla la conexión, mostramos aviso pequeño pero dejamos continuar
-                        print(f"Advertencia de conexión: {e}")
 
-                    # 3. Guardar sesión y cambiar de pantalla
+                    # 3. GUARDAR SESIÓN (LO HACEMOS ANTES PARA ASEGURAR)
                     st.session_state.datos_pedido = {
-                        "chof": nombre_chof, 
-                        "t_chof": t_chof, 
-                        "foto": foto_chof, 
-                        "placa": placa, 
-                        "id": id_v, 
-                        "mapa": mapa_url, 
-                        "lat_cli": lat_actual, 
-                        "lon_cli": lon_actual, 
-                        "nombre": nombre_cli, 
-                        "ref": ref_cli
+                        "chof": nombre_chof, "t_chof": t_chof, "foto": foto_chof, "placa": placa, 
+                        "id": id_v, "mapa": mapa_url, "lat_cli": lat_actual, "lon_cli": lon_actual, 
+                        "nombre": nombre_cli, "ref": ref_cli
                     }
                     st.session_state.viaje_confirmado = True
                     
-                    st.success("✅ ¡Conductor Encontrado!")
-                    time.sleep(0.5) 
-                    st.rerun()
-                    
+                    # 4. ENVIAR A EXCEL (En un bloque seguro para que no trabe la app)
+                    try:
+                        enviar_datos_a_sheets({
+                            "accion": "registrar_pedido", "id_viaje": id_v, "cliente": nombre_cli, 
+                            "tel_cliente": celular_input, "referencia": ref_cli, "conductor": nombre_chof, 
+                            "tel_conductor": t_chof, "mapa": mapa_url
+                        })
+                        enviar_datos_a_sheets({
+                            "accion": "cambiar_estado", "conductor": nombre_chof, "estado": "OCUPADO"
+                        })
+                    except:
+                        pass # Si falla el excel, no importa, el viaje ya inició en la app
+
+                    # 5. RECARGAR PÁGINA (INTENTO DOBLE PARA COMPATIBILIDAD)
+                    try:
+                        st.rerun()
+                    except:
+                        st.experimental_rerun()
                 else:
-                    st.error("⚠️ No hay conductores disponibles cerca en este momento.")
+                    st.error("⚠️ No hay conductores disponibles. Intenta de nuevo.")
 # --- PANTALLA DE VIAJE ACTIVO ---
 else:
     dp = st.session_state.datos_pedido
