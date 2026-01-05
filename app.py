@@ -101,67 +101,128 @@ def enviar_datos_a_sheets(datos):
         return f"Error: {str(e)}"
 
 def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
+    st.write("="*50)
+    st.write("🔍 INICIANDO BÚSQUEDA DE CONDUCTOR")
+    st.write("="*50)
+    
     df_c = cargar_datos("CHOFERES")
     df_u = cargar_datos("UBICACIONES")
     
-    if df_c.empty or df_u.empty: 
+    st.write(f"📊 CHOFERES cargados: {len(df_c)} filas")
+    st.write(f"📍 UBICACIONES cargadas: {len(df_u)} filas")
+    
+    if df_c.empty:
+        st.error("❌ Hoja CHOFERES está vacía")
         return None, None, None, "S/P"
     
-    # DEBUG: Mostrar lo que hay en CHOFERES
-    st.write("🔍 DEBUG CHOFERES:")
-    st.write(f"Total conductores: {len(df_c)}")
-    if 'ESTADO' in df_c.columns:
-        st.write(f"Estados disponibles: {df_c['ESTADO'].unique()}")
-        st.write(f"Conductores LIBRES: {len(df_c[df_c['ESTADO'].astype(str).str.upper().str.strip() == 'LIBRE'])}")
-    else:
-        st.error("❌ No se encontró la columna ESTADO")
-        st.write(f"Columnas disponibles: {df_c.columns.tolist()}")
+    if df_u.empty:
+        st.error("❌ Hoja UBICACIONES está vacía")
+        return None, None, None, "S/P"
+    
+    # Mostrar columnas
+    st.write("📋 Columnas en CHOFERES:")
+    st.write(df_c.columns.tolist())
+    st.write("📋 Columnas en UBICACIONES:")
+    st.write(df_u.columns.tolist())
+    
+    # Mostrar TODOS los datos de CHOFERES
+    st.write("👥 DATOS COMPLETOS DE CHOFERES:")
+    st.dataframe(df_c)
+    
+    # Verificar columna ESTADO
+    if 'ESTADO' not in df_c.columns:
+        st.error("❌ NO existe columna ESTADO")
         return None, None, None, "Error Cols"
     
-    if 'TIPO_VEHICULO' in df_c.columns:
-        st.write(f"Tipos de vehículo: {df_c['TIPO_VEHICULO'].unique()}")
+    st.write(f"📊 Estados en CHOFERES: {df_c['ESTADO'].unique()}")
+    
+    # Mostrar cada conductor y su estado
+    for idx, row in df_c.iterrows():
+        nombre = f"{row.get('NOMBRE', '')} {row.get('APELLIDO', '')}"
+        estado = row.get('ESTADO', 'SIN ESTADO')
+        st.write(f"  - {nombre}: Estado = '{estado}' (tipo: {type(estado)})")
     
     tipo_b = tipo_sol.split(" ")[0].upper()
-    st.write(f"Buscando tipo: {tipo_b}")
+    st.write(f"🔎 Buscando tipo: **{tipo_b}**")
 
-    libres = df_c[
-        (df_c['ESTADO'].astype(str).str.upper().str.strip() == 'LIBRE') & 
-        (df_c['TIPO_VEHICULO'].astype(str).str.upper().str.contains(tipo_b))
-    ]
+    # FILTRO 1: Solo conductores LIBRES
+    st.write("🔍 Aplicando filtro ESTADO == LIBRE...")
+    libres = df_c[df_c['ESTADO'].astype(str).str.upper().str.strip() == 'LIBRE']
     
-    st.write(f"✅ Conductores LIBRES del tipo {tipo_b}: {len(libres)}")
+    st.write(f"✅ Conductores con ESTADO=LIBRE: **{len(libres)}**")
+    
+    if len(libres) == 0:
+        st.error("❌ NO HAY CONDUCTORES LIBRES")
+        st.write("Intentando con estados diferentes...")
+        
+        # Mostrar qué estados hay
+        for estado_unico in df_c['ESTADO'].unique():
+            count = len(df_c[df_c['ESTADO'] == estado_unico])
+            st.write(f"  - Estado '{estado_unico}': {count} conductores")
+        
+        # MODO EMERGENCIA: Aceptar CUALQUIER estado
+        st.warning("⚠️ MODO EMERGENCIA: Aceptando TODOS los estados")
+        libres = df_c.copy()
+    
+    # FILTRO 2: Tipo de vehículo
+    if 'TIPO_VEHICULO' in libres.columns:
+        st.write(f"🚗 Tipos disponibles: {libres['TIPO_VEHICULO'].unique()}")
+        
+        antes = len(libres)
+        libres = libres[libres['TIPO_VEHICULO'].astype(str).str.upper().str.contains(tipo_b, na=False)]
+        st.write(f"Después de filtro tipo {tipo_b}: {len(libres)} (eliminados: {antes - len(libres)})")
+        
+        if len(libres) == 0:
+            st.error(f"❌ No hay conductores tipo {tipo_b}")
+            st.warning("Aceptando CUALQUIER tipo de vehículo")
+            libres = df_c.copy()
+    else:
+        st.warning("⚠️ No existe TIPO_VEHICULO")
 
+    # FILTRO 3: Deuda
     if 'DEUDA' in libres.columns:
         antes = len(libres)
         libres = libres[pd.to_numeric(libres['DEUDA'], errors='coerce').fillna(0) < 10.00]
-        st.write(f"Después de filtro de deuda: {len(libres)} (eliminados: {antes - len(libres)})")
+        st.write(f"Después de filtro deuda: {len(libres)} (eliminados: {antes - len(libres)})")
 
-    if libres.empty: 
-        st.warning("No quedan conductores después de filtros")
+    if libres.empty:
+        st.error("❌ No quedan conductores después de TODOS los filtros")
         return None, None, None, "S/P"
 
-    col_cond_u = next((c for c in df_u.columns if "CONDUCTOR" in c), None)
-    col_lat_u = next((c for c in df_u.columns if "LAT" in c), None)
-    col_lon_u = next((c for c in df_u.columns if "LON" in c), None)
+    st.write(f"✅ Conductores candidatos: **{len(libres)}**")
+    
+    # Buscar ubicaciones
+    col_cond_u = next((c for c in df_u.columns if "CONDUCTOR" in c.upper()), None)
+    col_lat_u = next((c for c in df_u.columns if "LAT" in c.upper()), None)
+    col_lon_u = next((c for c in df_u.columns if "LON" in c.upper()), None)
 
-    if not (col_cond_u and col_lat_u and col_lon_u): 
-        st.error(f"Columnas UBICACIONES: {df_u.columns.tolist()}")
+    st.write(f"📍 Columnas encontradas en UBICACIONES:")
+    st.write(f"  - Conductor: {col_cond_u}")
+    st.write(f"  - Latitud: {col_lat_u}")
+    st.write(f"  - Longitud: {col_lon_u}")
+
+    if not (col_cond_u and col_lat_u and col_lon_u):
+        st.error("❌ Faltan columnas en UBICACIONES")
+        st.write("DATOS DE UBICACIONES:")
+        st.dataframe(df_u)
         return None, None, None, "Error Ubi Cols"
 
     df_u['KEY_CLEAN'] = df_u[col_cond_u].astype(str).str.strip().str.upper()
     
-    st.write(f"🗺️ Conductores en UBICACIONES: {len(df_u)}")
-    st.write(f"Nombres en UBICACIONES: {df_u['KEY_CLEAN'].tolist()}")
+    st.write("📍 Conductores en UBICACIONES:")
+    st.write(df_u[['KEY_CLEAN', col_lat_u, col_lon_u]].to_string())
 
     mejor_chofer = None
     menor_distancia = float('inf')
 
-    for _, chofer in libres.iterrows():
+    st.write("🔄 Buscando el más cercano...")
+    
+    for idx, chofer in libres.iterrows():
         n = str(chofer.get('NOMBRE', '')).replace('nan','').strip()
         a = str(chofer.get('APELLIDO', '')).replace('nan','').strip()
         nombre_completo = f"{n} {a}".strip().upper()
         
-        st.write(f"🔎 Buscando ubicación de: {nombre_completo}")
+        st.write(f"🔎 Buscando: **{nombre_completo}**")
 
         ubi = df_u[df_u['KEY_CLEAN'] == nombre_completo]
         
@@ -170,26 +231,33 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
                 lat_cond = float(ubi.iloc[-1][col_lat_u])
                 lon_cond = float(ubi.iloc[-1][col_lon_u])
                 
+                st.write(f"  ✅ Ubicación: {lat_cond}, {lon_cond}")
+                
                 d = calcular_distancia_real(lat_cli, lon_cli, lat_cond, lon_cond)
                 
-                st.write(f"✅ {nombre_completo}: {d:.2f} km")
+                st.write(f"  📏 Distancia: **{d:.2f} km**")
                 
-                if d < 10000 and d < menor_distancia: 
+                if d < 10000 and d < menor_distancia:
                     menor_distancia = d
                     mejor_chofer = chofer
+                    st.success(f"  🎯 ¡MEJOR CANDIDATO hasta ahora!")
             except Exception as e:
-                st.write(f"❌ Error calculando distancia: {e}")
+                st.error(f"  ❌ Error: {e}")
                 continue
         else:
-            st.write(f"⚠️ {nombre_completo} no tiene ubicación GPS registrada")
+            st.warning(f"  ⚠️ NO tiene ubicación GPS registrada")
 
+    st.write("="*50)
+    
     if mejor_chofer is not None:
         t = str(mejor_chofer.get('TELEFONO', '0000000000')).split('.')[0].strip()
         foto = str(mejor_chofer.get('FOTO_PERFIL', 'SIN_FOTO'))
         placa = str(mejor_chofer.get('PLACA', 'S/P'))
-        st.success(f"🎯 Mejor chofer: {mejor_chofer.get('NOMBRE')} {mejor_chofer.get('APELLIDO')} a {menor_distancia:.2f} km")
+        n_final = f"{mejor_chofer.get('NOMBRE')} {mejor_chofer.get('APELLIDO')}"
+        st.success(f"🎉 CONDUCTOR SELECCIONADO: {n_final} ({menor_distancia:.2f} km)")
         return mejor_chofer, t, foto, placa
-        
+    
+    st.error("❌ NO SE ENCONTRÓ NINGÚN CONDUCTOR VÁLIDO")
     return None, None, None, "S/P"
 
 # --- 📱 INTERFAZ ---
