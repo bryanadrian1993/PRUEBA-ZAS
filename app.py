@@ -478,7 +478,7 @@ else:
         f'<a href="https://api.whatsapp.com/send?phone={dp["t_chof"]}&text={msg_wa}" '
         f'target="_blank" style="background-color:#25D366;color:white;padding:15px;'
         f'text-align:center;display:block;text-decoration:none;font-weight:bold;'
-        f'font-size:18px;border-radius:10px;margin:15px 0;">📲 CHATEAR CON CONDUCTOR</a>', 
+        f'font-size:18px;border-radius:10px;margin:15px 0;">📲 CLICK AQUI PEDIR TAXI (WHATSAPP)</a>', 
         unsafe_allow_html=True
     )
 
