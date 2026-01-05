@@ -442,12 +442,13 @@ if st.session_state.usuario_activo:
             else:
                 st.info("🔄 Finalizando viaje en el sistema... Por favor espera.")
         else:
-            # --- CONTROL INTELIGENTE DE GPS ---
-            # Si debe menos de $10, actualizamos GPS. Si está bloqueado, pausamos.
-            if deuda_actual < 10.00: 
+        # 1. BLOQUE GPS (Alineado adentro del else)
+        if deuda_actual < 10.00:
             st_autorefresh(interval=10000, key="gps_chofer")
-            else:
+        else:
             st.caption("⏸️ GPS en pausa mientras realizas el pago.")
+
+        
             if deuda_actual >= 10.00:
                 st.error(f"🚫 CUENTA BLOQUEADA: Tu deuda (${deuda_actual:.2f}) supera el límite de $10.00")
                 st.button("🟢 PONERME LIBRE", disabled=True)
