@@ -443,7 +443,7 @@ if st.session_state.usuario_activo:
                 st.info("🔄 Finalizando viaje en el sistema... Por favor espera.")
         else:
         # --- 1. CONTROL INTELIGENTE DE GPS ---
-        # Si debe menos de $10, actualizamos GPS. Si está bloqueado, pausamos.
+        # Si debe menos de $10, el GPS funciona. Si debe más, se pausa para dejarte pagar.
         if deuda_actual < 10.00:
             st_autorefresh(interval=10000, key="gps_chofer")
         else:
@@ -460,6 +460,7 @@ if st.session_state.usuario_activo:
                 st.info("Estás en estado OCUPADO.")
             
             col_lib, col_ocu = st.columns(2)
+            
             with col_lib:
                 if st.button("🟢 PONERME LIBRE", use_container_width=True):
                     enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "LIBRE"})
