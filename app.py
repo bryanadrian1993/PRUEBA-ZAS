@@ -151,8 +151,8 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
                 lon_cond = float(ubi.iloc[-1][col_lon_u])
                 d = calcular_distancia_real(lat_cli, lon_cli, lat_cond, lon_cond)
                 
-                # Radio de búsqueda: 10km
-                if d < 10 and d < menor_distancia:
+                # Radio de búsqueda: ABIERTO (Sin límite)
+                if d < menor_distancia:
                     menor_distancia = d
                     mejor_chofer = chofer
             except:
