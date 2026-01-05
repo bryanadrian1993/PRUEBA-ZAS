@@ -340,6 +340,7 @@ else:
 # --- PANTALLA DE SOLICITUD ---
 if not st.session_state.viaje_confirmado:
     with st.form("form_pedido"):
+        st.markdown('<div class="step-header">📝 Completa tu solicitud:</div>', unsafe_allow_html=True)
         nombre_cli = st.text_input("👤 Tu Nombre:", key="nombre_input")
         celular_input = st.text_input("📱 WhatsApp (Sin código de país):", key="celular_input")
         ref_cli = st.text_input("📍 Referencia / Dirección:", key="ref_input")
@@ -348,7 +349,7 @@ if not st.session_state.viaje_confirmado:
         enviar = st.form_submit_button("🚖 SOLICITAR UNIDAD", use_container_width=True)
 
     if enviar:
-        # Validaciones básicas
+        # Validaciones
         if not nombre_cli or not ref_cli:
             st.error("❌ Por favor completa nombre y referencia.")
         elif not celular_input or len(celular_input) < 7:
@@ -356,13 +357,12 @@ if not st.session_state.viaje_confirmado:
         elif not lat_actual:
             st.error("🚫 Sin señal GPS. Espera un momento.")
         else:
-            # ✅ AQUÍ ESTÁ EL TRUCO: Un spinner visual
             with st.spinner("🔄 Conectando con la central y buscando chofer..."):
-                
-                # 1. Buscamos chofer (ahora sin letras raras)
+                # 1. Buscamos chofer
                 chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
                 
                 if chof is not None:
+                    # Datos limpios
                     n_clean = str(chof.get('NOMBRE', '')).replace('nan','').strip()
                     a_clean = str(chof.get('APELLIDO', '')).replace('nan','').strip()
                     nombre_chof = f"{n_clean} {a_clean}".strip().upper()
@@ -370,28 +370,27 @@ if not st.session_state.viaje_confirmado:
                     id_v = f"TX-{random.randint(1000, 9999)}"
                     mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
                     
-                    # 2. Registrar Pedido
-                    datos_envio = {
-                        "accion": "registrar_pedido",
-                        "id_viaje": id_v,
-                        "cliente": nombre_cli,
-                        "tel_cliente": celular_input,
-                        "referencia": ref_cli,
-                        "conductor": nombre_chof,
-                        "tel_conductor": t_chof,
-                        "mapa": mapa_url
-                    }
-                    
-                    enviar_datos_a_sheets(datos_envio)
-                    
-                    # 3. Cambiar estado conductor
-                    enviar_datos_a_sheets({
-                        "accion": "cambiar_estado", 
-                        "conductor": nombre_chof, 
-                        "estado": "OCUPADO"
-                    })
-                    
-                    # 4. Guardar sesión y FINALIZAR
+                    # 2. Registrar en Sheets (Control de errores incluido)
+                    try:
+                        enviar_datos_a_sheets({
+                            "accion": "registrar_pedido",
+                            "id_viaje": id_v,
+                            "cliente": nombre_cli,
+                            "tel_cliente": celular_input,
+                            "referencia": ref_cli,
+                            "conductor": nombre_chof,
+                            "tel_conductor": t_chof,
+                            "mapa": mapa_url
+                        })
+                        enviar_datos_a_sheets({
+                            "accion": "cambiar_estado", 
+                            "conductor": nombre_chof, 
+                            "estado": "OCUPADO"
+                        })
+                    except:
+                        pass # Si falla el sheet, continuamos igual para no trabar la app
+
+                    # 3. Guardar sesión
                     st.session_state.datos_pedido = {
                         "chof": nombre_chof, 
                         "t_chof": t_chof, 
@@ -406,13 +405,11 @@ if not st.session_state.viaje_confirmado:
                     }
                     st.session_state.viaje_confirmado = True
                     
-                    # Mensaje de éxito rápido y recarga inmediata
                     st.success("✅ ¡Conductor Encontrado!")
-                    time.sleep(1) # Solo 1 segundo para leer
-                    st.rerun()    # Recarga obligatoria
-                    
+                    time.sleep(0.5) 
+                    st.rerun()
                 else:
-                    st.error("⚠️ No hay conductores disponibles cerca. Intenta de nuevo.")
+                    st.error("⚠️ No hay conductores disponibles cerca (Revisa que el conductor tenga GPS activo).")
 
 # --- PANTALLA DE VIAJE ACTIVO ---
 else:
