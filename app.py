@@ -40,10 +40,10 @@ st.markdown("""
 # --- FUNCIONES ---
 def calcular_distancia_real(lat1, lon1, lat2, lon2):
     R = 6371
-    dlat = math.radians(lat2-lat1)
-    dlon = math.radians(lon2-lon1)
-    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1))*math.cos(math.radians(lat2))*math.sin(dlon/2)**2
-    return 2*math.atan2(math.sqrt(a), math.sqrt(1-a))*R
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+    return 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a)) * R
 
 def cargar_datos(hoja):
     try:
@@ -67,8 +67,9 @@ def enviar_datos_a_sheets(datos):
 st.markdown('<div class="main-title">🚖 TAXI SEGURO</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">🌎 SERVICIO GLOBAL</div>', unsafe_allow_html=True)
 
-# --- GPS ---
+# --- GPS (SE GUARDA UNA SOLA VEZ) ---
 loc = get_geolocation()
+
 if loc and 'coords' in loc and st.session_state.lat_guardada is None:
     st.session_state.lat_guardada = loc['coords']['latitude']
     st.session_state.lon_guardada = loc['coords']['longitude']
@@ -77,7 +78,7 @@ lat_actual = st.session_state.lat_guardada
 lon_actual = st.session_state.lon_guardada
 
 if lat_actual:
-    st.success(f"📍 Ubicación detectada")
+    st.success("📍 Ubicación detectada")
 else:
     st.warning("⚠️ Esperando GPS...")
 
@@ -123,7 +124,7 @@ if not st.session_state.viaje_confirmado:
 # PANTALLA 2 – SEGUIMIENTO
 # ======================
 else:
-    st_autorefresh(interval=5000, key="seguimiento")
+    st_autorefresh(interval=5000, key="seguimiento_refresh")
 
     dp = st.session_state.datos_pedido
 
@@ -134,6 +135,7 @@ else:
     if st.button("❌ CANCELAR / NUEVO PEDIDO"):
         st.session_state.viaje_confirmado = False
         st.session_state.lat_guardada = None
+        st.session_state.lon_guardada = None
         st.rerun()
 
 st.markdown("<center>📩 soporte@taxiseguro.com</center>", unsafe_allow_html=True)
