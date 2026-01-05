@@ -20,10 +20,7 @@ import streamlit.components.v1 as components
 # --- 🔗 CONFIGURACIÓN TÉCNICA ---
 st.set_page_config(page_title="Portal Conductores", page_icon="🚖", layout="centered")
 
-# --- 🔄 AUTO-REFRESCO (EL CORAZÓN DEL GPS) ---
-# Esto obliga a la app a "despertar" cada 10 segundos para leer el GPS nuevo
-if st.session_state.get('usuario_activo', False):
-    st_autorefresh(interval=10000, key="gps_heartbeat")
+
 
 # --- 🔌 CONEXIÓN SEGURA A GOOGLE SHEETS ---
 scopes = [
@@ -445,6 +442,12 @@ if st.session_state.usuario_activo:
             else:
                 st.info("🔄 Finalizando viaje en el sistema... Por favor espera.")
         else:
+            # --- CONTROL INTELIGENTE DE GPS ---
+            # Si debe menos de $10, actualizamos GPS. Si está bloqueado, pausamos.
+            if deuda_actual < 10.00: 
+            st_autorefresh(interval=10000, key="gps_chofer")
+            else:
+            st.caption("⏸️ GPS en pausa mientras realizas el pago.")
             if deuda_actual >= 10.00:
                 st.error(f"🚫 CUENTA BLOQUEADA: Tu deuda (${deuda_actual:.2f}) supera el límite de $10.00")
                 st.button("🟢 PONERME LIBRE", disabled=True)
