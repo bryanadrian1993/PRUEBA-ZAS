@@ -261,19 +261,17 @@ if st.session_state.usuario_activo:
         estado_actual = str(fila_actual.iloc[0].get('Estado', 'OCUPADO'))
         
         if deuda_actual >= DEUDA_MAXIMA and "LIBRE" in estado_actual.upper():
-            st.error("⚠️ BLOQUEANDO CUENTA POR DEUDA...")
-            # 1. Mandamos la orden a Excel para que te ponga OCUPADO
+            # Solo mostramos un aviso pequeño, sin bloquear la pantalla
+            st.toast("⚠️ Deuda detectada: Cambiando estado a OCUPADO...", icon="🔒")
+            
+            # 1. Mandamos la orden a Excel en silencio
             enviar_datos({
                 "accion": "actualizar_estado", 
                 "nombre": user_nom, 
                 "apellido": user_ape, 
                 "estado": "OCUPADO"
             })
-            # 2. Forzamos el cambio visual AHORA MISMO
-            estado_actual = "BLOQUEADO"
-            time.sleep(2) # Damos un respiro para que Excel procese
-            st.rerun()    # Recargamos la página para aplicar el candado
-
+            estado_actual = "OCUPADO"
         if deuda_actual >= DEUDA_MAXIMA:
             st.error(f"⚠️ TU CUENTA ESTÁ BLOQUEADA. Debes: ${deuda_actual}")
             mostrar_boton_pago(deuda_actual)
