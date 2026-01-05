@@ -439,8 +439,7 @@ if st.session_state.usuario_activo:
                             st.session_state.cobro_realizado = False # Desbloqueamos si falló
             
             # 4. Si YA le dimos al botón, mostramos mensaje de espera en lugar del formulario
-            else:
-                st.info("🔄 Finalizando viaje en el sistema... Por favor espera.")
+            
         else:
         # --- 1. CONTROL INTELIGENTE DE GPS ---
         # Si debe menos de $10, el GPS funciona. Si debe más, se pausa para dejarte pagar.
