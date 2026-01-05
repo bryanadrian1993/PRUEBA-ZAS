@@ -469,19 +469,46 @@ if st.session_state.usuario_activo:
                     st.info("Estás en estado OCUPADO.")
                 
                 col_lib, col_ocu = st.columns(2)
-                
-                with col_lib:
-                    if st.button("🟢 PONERME LIBRE", use_container_width=True):
-                        enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "LIBRE"})
+            
+            with col_lib:
+                if st.button("🟢 PONERME LIBRE", use_container_width=True):
+                    try:
+                        # --- ESCRITURA DIRECTA (BLINDADA) ---
+                        indice_pandas = fila_actual.index[0] 
+                        fila_excel = indice_pandas + 2
+                        
+                        sh_status = client.open_by_key(SHEET_ID)
+                        wks_status = sh_status.worksheet("CHOFERES")
+                        wks_status.update_cell(fila_excel, 9, "LIBRE") # Columna I es la 9
+                        # ------------------------------------
+                        
+                        # Actualizamos GPS también para asegurar
                         if lat_actual and lon_actual:
-                            # Forzamos actualización de GPS en Excel
                             actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
-                        st.rerun()
                             
-                with col_ocu:
-                    if st.button("🔴 PONERME OCUPADO", use_container_width=True):
-                        enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "OCUPADO"})
+                        st.toast("✅ Estado cambiado a LIBRE", icon="🟢")
+                        time.sleep(1) # Pequeña pausa para asegurar
                         st.rerun()
+                    except Exception as e:
+                        st.error(f"Error cambiando estado: {e}")
+                            
+            with col_ocu:
+                if st.button("🔴 PONERME OCUPADO", use_container_width=True):
+                    try:
+                        # --- ESCRITURA DIRECTA (BLINDADA) ---
+                        indice_pandas = fila_actual.index[0] 
+                        fila_excel = indice_pandas + 2
+                        
+                        sh_status = client.open_by_key(SHEET_ID)
+                        wks_status = sh_status.worksheet("CHOFERES")
+                        wks_status.update_cell(fila_excel, 9, "OCUPADO") # Columna I es la 9
+                        # ------------------------------------
+                        
+                        st.toast("⏸️ Estado cambiado a OCUPADO", icon="🔴")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error cambiando estado: {e}")
     
     with st.expander("📜 Ver Mi Historial de Viajes"):
         if 'df_viajes' not in locals():
