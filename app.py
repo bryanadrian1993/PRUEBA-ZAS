@@ -349,67 +349,70 @@ if not st.session_state.viaje_confirmado:
         enviar = st.form_submit_button("🚖 SOLICITAR UNIDAD", use_container_width=True)
 
     if enviar:
+        st.write("🚦 DIAGNÓSTICO INICIADO...") 
+        
         # Validaciones
         if not nombre_cli or not ref_cli:
-            st.error("❌ Por favor completa nombre y referencia.")
-        elif not celular_input or len(celular_input) < 7:
-            st.error("❌ Ingresa un WhatsApp válido.")
+            st.error("❌ Faltan datos.")
         elif not lat_actual:
-            st.error("🚫 Sin señal GPS. Espera un momento.")
+            st.error("🚫 Sin GPS.")
         else:
-            with st.spinner("🔄 Conectando con la central y buscando chofer..."):
-                # 1. Buscamos chofer
+            st.warning("1️⃣ PASO 1: Validaciones OK. Buscando chofer...")
+            
+            # Intentamos buscar chofer con un control de tiempo (timeout simulado)
+            try:
                 chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
-                
-                if chof is not None:
-                    # Datos limpios
-                    n_clean = str(chof.get('NOMBRE', '')).replace('nan','').strip()
-                    a_clean = str(chof.get('APELLIDO', '')).replace('nan','').strip()
-                    nombre_chof = f"{n_clean} {a_clean}".strip().upper()
-                    
-                    id_v = f"TX-{random.randint(1000, 9999)}"
-                    mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
-                    
-                    # 2. Registrar en Sheets (Control de errores incluido)
-                    try:
-                        enviar_datos_a_sheets({
-                            "accion": "registrar_pedido",
-                            "id_viaje": id_v,
-                            "cliente": nombre_cli,
-                            "tel_cliente": celular_input,
-                            "referencia": ref_cli,
-                            "conductor": nombre_chof,
-                            "tel_conductor": t_chof,
-                            "mapa": mapa_url
-                        })
-                        enviar_datos_a_sheets({
-                            "accion": "cambiar_estado", 
-                            "conductor": nombre_chof, 
-                            "estado": "OCUPADO"
-                        })
-                    except:
-                        pass # Si falla el sheet, continuamos igual para no trabar la app
+                st.warning(f"2️⃣ PASO 2: Función de búsqueda terminó. Resultado: {chof is not None}")
+            except Exception as e:
+                st.error(f"❌ ERROR CRÍTICO EN BÚSQUEDA: {e}")
+                chof = None
 
-                    # 3. Guardar sesión
-                    st.session_state.datos_pedido = {
-                        "chof": nombre_chof, 
-                        "t_chof": t_chof, 
-                        "foto": foto_chof, 
-                        "placa": placa, 
-                        "id": id_v, 
-                        "mapa": mapa_url, 
-                        "lat_cli": lat_actual, 
-                        "lon_cli": lon_actual, 
-                        "nombre": nombre_cli, 
-                        "ref": ref_cli
-                    }
-                    st.session_state.viaje_confirmado = True
-                    
-                    st.success("✅ ¡Conductor Encontrado!")
-                    time.sleep(0.5) 
-                    st.rerun()
-                else:
-                    st.error("⚠️ No hay conductores disponibles cerca (Revisa que el conductor tenga GPS activo).")
+            if chof is not None:
+                st.warning("3️⃣ PASO 3: Preparando datos para guardar...")
+                
+                n_clean = str(chof.get('NOMBRE', '')).replace('nan','').strip()
+                a_clean = str(chof.get('APELLIDO', '')).replace('nan','').strip()
+                nombre_chof = f"{n_clean} {a_clean}".strip().upper()
+                id_v = f"TX-{random.randint(1000, 9999)}"
+                mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
+                
+                # Intentamos guardar en Google Sheets
+                st.warning("4️⃣ PASO 4: Conectando con Google Sheets...")
+                try:
+                    res = enviar_datos_a_sheets({
+                        "accion": "registrar_pedido",
+                        "id_viaje": id_v,
+                        "cliente": nombre_cli,
+                        "tel_cliente": celular_input,
+                        "referencia": ref_cli,
+                        "conductor": nombre_chof,
+                        "tel_conductor": t_chof,
+                        "mapa": mapa_url
+                    })
+                    st.warning(f"5️⃣ PASO 5: Sheets respondió: {res}")
+                except Exception as e:
+                    st.error(f"⚠️ Aviso: Falló el registro en Excel ({e}), pero continuamos.")
+
+                # Guardamos sesión
+                st.session_state.datos_pedido = {
+                    "chof": nombre_chof, 
+                    "t_chof": t_chof, 
+                    "foto": foto_chof, 
+                    "placa": placa, 
+                    "id": id_v, 
+                    "mapa": mapa_url, 
+                    "lat_cli": lat_actual, 
+                    "lon_cli": lon_actual, 
+                    "nombre": nombre_cli, 
+                    "ref": ref_cli
+                }
+                st.session_state.viaje_confirmado = True
+                
+                st.success("✅ ¡ÉXITO! Recargando...")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("⚠️ El buscador terminó pero no encontró conductores cerca (o falló la lectura del Excel).")
 
 # --- PANTALLA DE VIAJE ACTIVO ---
 else:
