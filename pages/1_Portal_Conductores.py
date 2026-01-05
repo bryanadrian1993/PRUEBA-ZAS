@@ -442,27 +442,31 @@ if st.session_state.usuario_activo:
             else:
                 st.info("🔄 Finalizando viaje en el sistema... Por favor espera.")
         else:
-        # 1. BLOQUE GPS (Alineado adentro del else)
+        # --- 1. CONTROL INTELIGENTE DE GPS ---
+        # Si debe menos de $10, actualizamos GPS. Si está bloqueado, pausamos.
         if deuda_actual < 10.00:
             st_autorefresh(interval=10000, key="gps_chofer")
         else:
             st.caption("⏸️ GPS en pausa mientras realizas el pago.")
 
-        
-            if deuda_actual >= 10.00:
-                st.error(f"🚫 CUENTA BLOQUEADA: Tu deuda (${deuda_actual:.2f}) supera el límite de $10.00")
-                st.button("🟢 PONERME LIBRE", disabled=True)
-            else:
-                if "OCUPADO" in estado_actual:
-                    st.info("Estás en estado OCUPADO.")
-                col_lib, col_ocu = st.columns(2)
-                with col_lib:
-                    if st.button("🟢 PONERME LIBRE", use_container_width=True):
-                        enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "LIBRE"})
-                        if lat_actual and lon_actual:
-                            # Forzamos actualización de GPS en Excel
-                            actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
-                        st.rerun()
+        # --- 2. LÓGICA DE BLOQUEO O TRABAJO ---
+        if deuda_actual >= 10.00:
+            # CASO A: CHOFER BLOQUEADO
+            st.error(f"🚫 CUENTA BLOQUEADA: Tu deuda (${deuda_actual:.2f}) supera el límite de $10.00")
+            st.button("🟢 PONERME LIBRE", disabled=True)
+        else:
+            # CASO B: CHOFER ACTIVO (Puede trabajar)
+            if "OCUPADO" in estado_actual:
+                st.info("Estás en estado OCUPADO.")
+            
+            col_lib, col_ocu = st.columns(2)
+            with col_lib:
+                if st.button("🟢 PONERME LIBRE", use_container_width=True):
+                    enviar_datos({"accion": "actualizar_estado", "nombre": user_nom, "apellido": user_ape, "estado": "LIBRE"})
+                    if lat_actual and lon_actual:
+                        # Forzamos actualización de GPS en Excel
+                        actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
+                    st.rerun()
                         
                 with col_ocu:
                     if st.button("🔴 PONERME OCUPADO", use_container_width=True):
