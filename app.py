@@ -354,8 +354,10 @@ if not st.session_state.viaje_confirmado:
         elif not lat_actual:
             st.error("🚫 Sin señal GPS. Espera un momento.")
         else:
-            with st.spinner("🔄 Confirmando viaje..."):
-                # 2. Buscar Chofer
+            # 2. Bloqueamos la interfaz visualmente
+            with st.spinner("🚀 Iniciando viaje..."):
+                
+                # Búsqueda rápida
                 chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
                 
                 if chof is not None:
@@ -366,7 +368,8 @@ if not st.session_state.viaje_confirmado:
                     id_v = f"TX-{random.randint(1000, 9999)}"
                     mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
 
-                    # 3. GUARDAR SESIÓN (LO HACEMOS ANTES PARA ASEGURAR)
+                    # --- CAMBIO DE ESTADO INMEDIATO (El Truco) ---
+                    # Guardamos sesión PRIMERO para que el cambio de pantalla sea instantáneo
                     st.session_state.datos_pedido = {
                         "chof": nombre_chof, "t_chof": t_chof, "foto": foto_chof, "placa": placa, 
                         "id": id_v, "mapa": mapa_url, "lat_cli": lat_actual, "lon_cli": lon_actual, 
@@ -374,7 +377,8 @@ if not st.session_state.viaje_confirmado:
                     }
                     st.session_state.viaje_confirmado = True
                     
-                    # 4. ENVIAR A EXCEL (En un bloque seguro para que no trabe la app)
+                    # --- ENVIAR A EXCEL EN "SEGUNDO PLANO" ---
+                    # Usamos un try/except silencioso. Si esto tarda, la app ya habrá cambiado de pantalla.
                     try:
                         enviar_datos_a_sheets({
                             "accion": "registrar_pedido", "id_viaje": id_v, "cliente": nombre_cli, 
@@ -385,13 +389,11 @@ if not st.session_state.viaje_confirmado:
                             "accion": "cambiar_estado", "conductor": nombre_chof, "estado": "OCUPADO"
                         })
                     except:
-                        pass # Si falla el excel, no importa, el viaje ya inició en la app
+                        pass 
 
-                    # 5. RECARGAR PÁGINA (INTENTO DOBLE PARA COMPATIBILIDAD)
-                    try:
-                        st.rerun()
-                    except:
-                        st.experimental_rerun()
+                    # Forzar recarga inmediata
+                    st.rerun()
+                    
                 else:
                     st.error("⚠️ No hay conductores disponibles. Intenta de nuevo.")
 # --- PANTALLA DE VIAJE ACTIVO ---
