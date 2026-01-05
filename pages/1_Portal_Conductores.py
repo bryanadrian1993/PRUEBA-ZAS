@@ -375,7 +375,13 @@ if st.session_state.usuario_activo:
             st.write(f"📞 **Tel:** {datos_v.get('Tel Cliente', 'S/D')}")
             st.write(f"📍 **Destino:** {datos_v.get('Referencia', 'S/D')}")
             st.markdown(f"[🗺️ Ver Mapa]({datos_v.get('Mapa', '#')})")
-            if st.button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True):
+            # --- SOLUCIÓN: BOTÓN BLINDADO (FORMULARIO) ---
+            with st.form("form_cobrar_viaje"):
+                st.write("¿Confirmar fin del viaje?")
+                # Cambiamos st.button por st.form_submit_button
+                boton_cobrar = st.form_submit_button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True)
+            
+            if boton_cobrar:
                 with st.spinner("Calculando distancia y actualizando deuda..."):
                     try:
                         link_mapa = str(datos_v.get('Mapa', ''))
