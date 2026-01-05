@@ -370,55 +370,80 @@ if st.session_state.usuario_activo:
             ]
         if not viaje_activo.empty and "OCUPADO" in estado_actual:
             datos_v = viaje_activo.iloc[-1]
+            
             st.warning("🚖 TIENES UN PASAJERO A BORDO")
             st.write(f"👤 **Cliente:** {datos_v.get('Cliente', 'S/D')}")
             st.write(f"📞 **Tel:** {datos_v.get('Tel Cliente', 'S/D')}")
             st.write(f"📍 **Destino:** {datos_v.get('Referencia', 'S/D')}")
             st.markdown(f"[🗺️ Ver Mapa]({datos_v.get('Mapa', '#')})")
-            # --- SOLUCIÓN: BOTÓN BLINDADO (FORMULARIO) ---
-            with st.form("form_cobrar_viaje"):
-                st.write("¿Confirmar fin del viaje?")
-                # Cambiamos st.button por st.form_submit_button
-                boton_cobrar = st.form_submit_button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True)
             
-            if boton_cobrar:
-                with st.spinner("Calculando distancia y actualizando deuda..."):
-                    try:
-                        link_mapa = str(datos_v.get('Mapa', ''))
-                        distancia = 2.0
-                        
+            st.divider()
+
+            # --- LÓGICA DE COBRO BLINDADA (PARA QUE FUNCIONE A LA PRIMERA) ---
+            
+            # 1. Inicializar la bandera si no existe
+            if "cobro_realizado" not in st.session_state:
+                st.session_state.cobro_realizado = False
+
+            # 2. Si NO hemos cobrado todavía, mostramos el botón
+            if not st.session_state.cobro_realizado:
+                with st.form("form_cobrar_viaje"):
+                    st.write("¿Llegaste al destino?")
+                    # Usamos form_submit_button que es resistente a recargas
+                    boton_cobrar = st.form_submit_button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True)
+                
+                if boton_cobrar:
+                    # 3. BLOQUEO INMEDIATO: Ocultamos el botón visualmente
+                    st.session_state.cobro_realizado = True
+                    
+                    with st.spinner("⏳ Procesando cobro y finalizando viaje..."):
                         try:
-                            numeros = re.findall(r'-?\d+\.\d+', link_mapa)
-                            if len(numeros) >= 2:
-                                lat_cli = float(numeros[-2])
-                                lon_cli = float(numeros[-1])
-                                
-                                dLat = math.radians(lat_actual - lat_cli)
-                                dLon = math.radians(lon_actual - lon_cli)
-                                a = math.sin(dLat/2)**2 + math.cos(math.radians(lat_cli)) * \
-                                    math.cos(math.radians(lat_actual)) * math.sin(dLon/2)**2
-                                c = 2 * math.asin(math.sqrt(a))
-                                distancia = 6371 * c 
-                        except: pass
-                        
-                        if distancia < 1.0: distancia = 1.0
-                        comision_nueva = round(distancia * TARIFA_POR_KM, 2)
-                        
-                        res = enviar_datos_a_sheets({
-                            "accion": "finalizar_y_deuda",
-                            "conductor": nombre_completo_unificado,
-                            "comision": comision_nueva,
-                            "km": round(distancia, 2)
-                        })
-                        if res == "Ok":
-                            st.success(f"✅ Viaje Finalizado. Comisión de ${comision_nueva} cargada.")
-                            st.balloons()
-                            time.sleep(2)
-                            st.rerun()
-                        else:
-                            st.error("❌ Error de conexión con el servidor.")
-                    except Exception as e:
-                        st.error(f"❌ Error técnico: {e}") 
+                            link_mapa = str(datos_v.get('Mapa', ''))
+                            distancia = 2.0
+                            
+                            # Intento de cálculo de distancia real
+                            try:
+                                numeros = re.findall(r'-?\d+\.\d+', link_mapa)
+                                if len(numeros) >= 2:
+                                    lat_cli = float(numeros[-2])
+                                    lon_cli = float(numeros[-1])
+                                    
+                                    dLat = math.radians(lat_actual - lat_cli)
+                                    dLon = math.radians(lon_actual - lon_cli)
+                                    a = math.sin(dLat/2)**2 + math.cos(math.radians(lat_cli)) * \
+                                        math.cos(math.radians(lat_actual)) * math.sin(dLon/2)**2
+                                    c = 2 * math.asin(math.sqrt(a))
+                                    distancia = 6371 * c 
+                            except: 
+                                pass
+                            
+                            if distancia < 1.0: distancia = 1.0
+                            comision_nueva = round(distancia * TARIFA_POR_KM, 2)
+                            
+                            # Enviar a Google Sheets
+                            res = enviar_datos_a_sheets({
+                                "accion": "finalizar_y_deuda",
+                                "conductor": nombre_completo_unificado,
+                                "comision": comision_nueva,
+                                "km": round(distancia, 2)
+                            })
+                            
+                            if res == "Ok" or "Ok" in str(res):
+                                st.success(f"✅ ¡VIAJE FINALIZADO! Comisión: ${comision_nueva}")
+                                st.balloons()
+                                time.sleep(3) # Damos tiempo a que Excel procese
+                                st.session_state.cobro_realizado = False # Reseteamos para el futuro
+                                st.rerun()
+                            else:
+                                st.error("❌ Error de conexión. Intenta de nuevo.")
+                                st.session_state.cobro_realizado = False # Desbloqueamos si falló
+                        except Exception as e:
+                            st.error(f"❌ Error técnico: {e}")
+                            st.session_state.cobro_realizado = False # Desbloqueamos si falló
+            
+            # 4. Si YA le dimos al botón, mostramos mensaje de espera en lugar del formulario
+            else:
+                st.info("🔄 Finalizando viaje en el sistema... Por favor espera.")
         else:
             if deuda_actual >= 10.00:
                 st.error(f"🚫 CUENTA BLOQUEADA: Tu deuda (${deuda_actual:.2f}) supera el límite de $10.00")
