@@ -52,7 +52,7 @@ def mostrar_boton_pago(monto_deuda):
     cedula_conductor = st.text_input("Ingresa tu número de identificación:", max_chars=15)
     
     if cedula_conductor:
-        client_id = "AS96Gq4_mueF7i7xjUzx2nEgYSmiS6t69datLVrPMwxDIxboQC00sZf7TBM6KwkRxUL92ys0I-JXXq_y"
+        client_id = "AbTSfP381kOrNXmRJO8SR7IvjtjLx0Qmj1TyERiV5RzVheYAAxvgGWHJam3KE_iyfcrf56VV_k-MPYmv"
         valor_a_pagar = f"{monto_deuda:.2f}"
         
         _html = f"""
