@@ -251,6 +251,7 @@ if not st.session_state.viaje_confirmado:
                             "estado": "OCUPADO"
                         })
                         
+                        # PRIMERO guardamos los datos
                         st.session_state.datos_pedido = {
                             "chof": nombre_chof, 
                             "t_chof": t_chof, 
@@ -264,12 +265,14 @@ if not st.session_state.viaje_confirmado:
                             "ref": ref_cli
                         }
                         
+                        # LUEGO cambiamos el estado
                         st.session_state.viaje_confirmado = True
+                        
+                        # Mostramos mensaje de éxito
                         st.success("✅ ¡Conductor asignado exitosamente!")
                         st.balloons()
                         
-                        import time
-                        time.sleep(1)
+                        # IMPORTANTE: Usar st.rerun() sin importar
                         st.rerun()
                     else:
                         st.error("❌ Error al registrar el pedido. Intenta nuevamente.")
