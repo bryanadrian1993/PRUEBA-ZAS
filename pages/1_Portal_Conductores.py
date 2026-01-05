@@ -282,7 +282,9 @@ if st.session_state.usuario_activo:
             st.subheader("💳 Centro de Pagos")
             st.warning(f"Saldo pendiente: **${deuda_actual:.2f}**")
             
-            tab_deuna, tab_ = st.tabs(["📲 Pagar con DEUNA", "🌎 Pagar con PAYPAL"])
+            # --- CORRECCIÓN: UN SOLO MENÚ DE PESTAÑAS PARA TODO ---
+            tab_deuna, tab_paypal = st.tabs(["📲 Pagar con DEUNA", "🌎 Pagar con PAYPAL"])
+            
             with tab_deuna:
                 st.write("**Escanea el QR:**")
                 try:
@@ -300,12 +302,10 @@ if st.session_state.usuario_activo:
                     </a>
                 ''', unsafe_allow_html=True)
             
-            tab_qr, tab_paypal = st.tabs(["📲 Transferencia/QR", "💳 Tarjeta / PayPal"])
             with tab_paypal:
                 st.subheader("🌎 Pagar con PayPal")
                 
-                # --- ARREGLO DEL ERROR DE PANTALLA ROJA (StreamlitValueBelowMinError) ---
-                # Si la deuda es menor a 1.00, sugerimos 1.00 para que no explote la app
+                # --- ARREGLO DEL ERROR DE PANTALLA ROJA ---
                 val_sugerido = float(deuda_actual)
                 if val_sugerido < 1.00: 
                     val_sugerido = 1.00
