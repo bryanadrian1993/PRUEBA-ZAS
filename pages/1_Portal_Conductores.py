@@ -125,6 +125,17 @@ if loc and 'coords' in loc:
     lon_actual = loc['coords']['longitude']
 
 # --- 🛠️ FUNCIONES ---
+def reproducir_alerta():
+    # Sonido de notificación agradable (Campana tipo Aeropuerto)
+    sound_url = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"
+    
+    # Código HTML invisible que fuerza la reproducción
+    html_audio = f"""
+        <audio autoplay>
+        <source src="{sound_url}" type="audio/mp3">
+        </audio>
+    """
+    st.markdown(html_audio, unsafe_allow_html=True)
 def cargar_datos(hoja):
     try:
         sh = client.open_by_key(SHEET_ID)
@@ -370,11 +381,32 @@ if st.session_state.usuario_activo:
         st.subheader("Gestión de Viaje")
         df_viajes = cargar_datos("VIAJES")
         viaje_activo = pd.DataFrame() 
+        
         if not df_viajes.empty and 'Conductor' in df_viajes.columns:
+            # Filtramos los viajes EN CURSO para este conductor
             viaje_activo = df_viajes[
                 (df_viajes['Conductor'].astype(str).str.upper() == nombre_completo_unificado) & 
                 (df_viajes['Estado'].astype(str) == "EN CURSO")
             ]
+            
+        # --- LÓGICA DE SONIDO DE NOTIFICACIÓN ---
+        # 1. Creamos una memoria para saber cuál fue el último viaje que avisamos
+        if 'ultimo_viaje_avisado' not in st.session_state:
+            st.session_state.ultimo_viaje_avisado = ""
+
+        if not viaje_activo.empty:
+            # Identificamos el viaje actual usando Cliente + Fecha (para que sea único)
+            datos_v = viaje_activo.iloc[-1]
+            id_viaje_actual = f"{datos_v.get('Cliente')}_{datos_v.get('Fecha')}"
+            
+            # Si el viaje que vemos es DIFERENTE al último avisado -> ¡DING DING! 🔔
+            if st.session_state.ultimo_viaje_avisado != id_viaje_actual:
+                reproducir_alerta()
+                st.toast("🔔 ¡NUEVO VIAJE ASIGNADO!", icon="🚖")
+                st.session_state.ultimo_viaje_avisado = id_viaje_actual # Guardamos para no repetir
+        
+        # ----------------------------------------
+
         if not viaje_activo.empty and "OCUPADO" in estado_actual:
             datos_v = viaje_activo.iloc[-1]
             
