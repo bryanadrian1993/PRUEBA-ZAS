@@ -60,20 +60,33 @@ def obtener_hora_gps(latitud, longitud):
 
 def obtener_tarifa_local(lat, lon):
     try:
+        # TARIFA BASE (Dólares) = 0.05 (5 centavos)
+        tarifa_base_usd = 0.05 
+
         if not lat or not lon:
-            return {"moneda": "USD", "simbolo": "$", "tarifa": 0.50, "pais": "Global"}
+            return {"moneda": "USD", "simbolo": "$", "tarifa": tarifa_base_usd, "pais": "Global"}
+
         tf = TimezoneFinder()
         zona = tf.timezone_at(lng=float(lon), lat=float(lat))
+        
         if zona:
+            # 🇨🇴 COLOMBIA (Pesos)
             if "Bogota" in zona:
-                return {"moneda": "COP", "simbolo": "$", "tarifa": 2500.00, "pais": "Colombia"}
+                return {"moneda": "COP", "simbolo": "$", "tarifa": 250.00, "pais": "Colombia"} # Ajustado a proporción similar
+            
+            # 🇪🇸 ESPAÑA (Euros)
             elif "Madrid" in zona or "Ceuta" in zona or "Canary" in zona or "Europe" in zona:
-                return {"moneda": "EUR", "simbolo": "€", "tarifa": 1.20, "pais": "España"}
+                return {"moneda": "EUR", "simbolo": "€", "tarifa": 0.05, "pais": "España"} # 5 céntimos de Euro
+            
+            # 🇲🇽 MÉXICO (Pesos Mexicanos)
             elif "Mexico" in zona:
-                return {"moneda": "MXN", "simbolo": "$", "tarifa": 15.00, "pais": "México"}
-        return {"moneda": "USD", "simbolo": "$", "tarifa": 0.50, "pais": "Ecuador"}
+                return {"moneda": "MXN", "simbolo": "$", "tarifa": 1.00, "pais": "México"} # 1 Peso aprox
+
+        # 🇪🇨 ECUADOR / RESTO DEL MUNDO
+        return {"moneda": "USD", "simbolo": "$", "tarifa": tarifa_base_usd, "pais": "Ecuador"}
+            
     except:
-        return {"moneda": "USD", "simbolo": "$", "tarifa": 0.50, "pais": "Ecuador"}
+        return {"moneda": "USD", "simbolo": "$", "tarifa": 0.05, "pais": "Ecuador"}
 
 # --- FUNCIÓN DE PAGO PAYPAL ---
 def mostrar_boton_pago(monto_deuda):
