@@ -15,7 +15,7 @@ import base64
 from PIL import Image
 
 # --- ⚙️ CONFIGURACIÓN DEL SISTEMA ---
-st.set_page_config(page_title="TAXI SEGURO", page_icon="🚖", layout="centered")
+st.set_page_config(page_title="ZAS - App Conductores", page_icon="⚡", layout="centered")
 
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
@@ -308,8 +308,13 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
     return None, None, None, "S/P"
 
 # --- 📱 INTERFAZ ---
-st.markdown('<div class="main-title">🚖 TAXI SEGURO</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">🌎 SERVICIO GLOBAL</div>', unsafe_allow_html=True)
+# Título con estilo
+st.markdown("""
+    <div style="text-align: center;">
+        <h1 style="margin-bottom: 0;">⚡ ZAS</h1>
+        <h3 style="color: #E91E63; margin-top: -10px;">Tu viaje en un instante</h3>
+    </div>
+""", unsafe_allow_html=True)
 
 # --- OBTENER UBICACIÓN GPS ---
 loc = get_geolocation()
@@ -511,4 +516,4 @@ else:
         st.error(f"❌ Error al cargar mapa: {str(e)}")
 
 # Footer
-st.markdown('<div class="footer">📧 Soporte: soporte@taxiseguro.com<br>🌐 www.taxiseguro.com</div>', unsafe_allow_html=True)
+st.markdown('<div style="text-align:center; color:#888; font-size:12px; margin-top:50px;">© 2025 ZAS App<br>📧 taxi-seguro-word@hotmail.com</div>', unsafe_allow_html=True)
