@@ -1,3 +1,6 @@
+import pytz
+from timezonefinder import TimezoneFinder
+from datetime import datetime
 import streamlit as st
 import pandas as pd
 from streamlit_js_eval import get_geolocation
@@ -72,7 +75,22 @@ def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
             return [{"path": data['routes'][0]['geometry']['coordinates']}]
     except:
         return [{"path": [[lon1, lat1], [lon2, lat2]]}]
+def obtener_hora_gps(latitud, longitud):
+    try:
+        if not latitud or not longitud:
+            # Si no hay GPS, usa hora de Ecuador
+            return datetime.now(pytz.timezone('America/Guayaquil')).strftime("%Y-%m-%d %H:%M:%S")
 
+        tf = TimezoneFinder()
+        zona = tf.timezone_at(lng=float(longitud), lat=float(latitud)) 
+        
+        if zona:
+            return datetime.now(pytz.timezone(zona)).strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            return datetime.now(pytz.timezone('America/Guayaquil')).strftime("%Y-%m-%d %H:%M:%S")
+            
+    except:
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 def cargar_datos(hoja):
     try:
         cb = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -381,10 +399,19 @@ if not st.session_state.viaje_confirmado:
                     # Usamos un try/except silencioso. Si esto tarda, la app ya habrá cambiado de pantalla.
                     try:
                         enviar_datos_a_sheets({
-                            "accion": "registrar_pedido", "id_viaje": id_v, "cliente": nombre_cli, 
-                            "tel_cliente": celular_input, "referencia": ref_cli, "conductor": nombre_chof, 
-                            "tel_conductor": t_chof, "mapa": mapa_url
-                        })
+                        "accion": "registrar_pedido", 
+                        "id_viaje": id_v, 
+                        "cliente": nombre_cli,
+                        
+                        # AQUÍ ESTÁ EL CAMBIO PARA LA HORA MUNDIAL 👇
+                        "Fecha": obtener_hora_gps(lat_actual, lon_actual), 
+                        
+                        "tel_cliente": celular_input, 
+                        "referencia": ref_cli, 
+                        "conductor": nombre_chof, 
+                        "tel_conductor": t_chof, 
+                        "mapa": mapa_url
+                    })
                         enviar_datos_a_sheets({
                             "accion": "cambiar_estado", "conductor": nombre_chof, "estado": "OCUPADO"
                         })
