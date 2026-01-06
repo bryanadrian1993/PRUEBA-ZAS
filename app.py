@@ -386,8 +386,7 @@ if not st.session_state.viaje_confirmado:
                     id_v = f"TX-{random.randint(1000, 9999)}"
                     mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
 
-                    # --- CAMBIO DE ESTADO INMEDIATO (El Truco) ---
-                    # Guardamos sesión PRIMERO para que el cambio de pantalla sea instantáneo
+                    # --- CAMBIO DE ESTADO INMEDIATO ---
                     st.session_state.datos_pedido = {
                         "chof": nombre_chof, "t_chof": t_chof, "foto": foto_chof, "placa": placa, 
                         "id": id_v, "mapa": mapa_url, "lat_cli": lat_actual, "lon_cli": lon_actual, 
@@ -395,30 +394,24 @@ if not st.session_state.viaje_confirmado:
                     }
                     st.session_state.viaje_confirmado = True
                     
-                    # --- ENVIAR A EXCEL EN "SEGUNDO PLANO" ---
-                    # Usamos un try/except silencioso. Si esto tarda, la app ya habrá cambiado de pantalla.
+                    # --- ENVIAR A EXCEL (CON HORA MUNDIAL) ---
                     try:
-                        # 1. Registramos el pedido con la HORA MUNDIAL
                         enviar_datos_a_sheets({
                             "accion": "registrar_pedido", 
                             "id_viaje": id_v, 
                             "cliente": nombre_cli,
-                            "Fecha": obtener_hora_gps(lat_actual, lon_actual), # <--- Aquí está la magia
+                            "Fecha": obtener_hora_gps(lat_actual, lon_actual), # <--- HORA MUNDIAL
                             "tel_cliente": celular_input, 
                             "referencia": ref_cli, 
                             "conductor": nombre_chof, 
                             "tel_conductor": t_chof, 
                             "mapa": mapa_url
                         })
-
-                        # 2. Cambiamos al chofer a OCUPADO
                         enviar_datos_a_sheets({
-                            "accion": "cambiar_estado", 
-                            "conductor": nombre_chof, 
-                            "estado": "OCUPADO"
+                            "accion": "cambiar_estado", "conductor": nombre_chof, "estado": "OCUPADO"
                         })
                     except:
-                        pass
+                        pass 
 
                     # Forzar recarga inmediata
                     st.rerun()
