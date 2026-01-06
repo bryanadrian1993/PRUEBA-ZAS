@@ -398,25 +398,27 @@ if not st.session_state.viaje_confirmado:
                     # --- ENVIAR A EXCEL EN "SEGUNDO PLANO" ---
                     # Usamos un try/except silencioso. Si esto tarda, la app ya habrá cambiado de pantalla.
                     try:
+                        # 1. Registramos el pedido con la HORA MUNDIAL
                         enviar_datos_a_sheets({
-                        "accion": "registrar_pedido", 
-                        "id_viaje": id_v, 
-                        "cliente": nombre_cli,
-                        
-                        # AQUÍ ESTÁ EL CAMBIO PARA LA HORA MUNDIAL 👇
-                        "Fecha": obtener_hora_gps(lat_actual, lon_actual), 
-                        
-                        "tel_cliente": celular_input, 
-                        "referencia": ref_cli, 
-                        "conductor": nombre_chof, 
-                        "tel_conductor": t_chof, 
-                        "mapa": mapa_url
-                    })
+                            "accion": "registrar_pedido", 
+                            "id_viaje": id_v, 
+                            "cliente": nombre_cli,
+                            "Fecha": obtener_hora_gps(lat_actual, lon_actual), # <--- Aquí está la magia
+                            "tel_cliente": celular_input, 
+                            "referencia": ref_cli, 
+                            "conductor": nombre_chof, 
+                            "tel_conductor": t_chof, 
+                            "mapa": mapa_url
+                        })
+
+                        # 2. Cambiamos al chofer a OCUPADO
                         enviar_datos_a_sheets({
-                            "accion": "cambiar_estado", "conductor": nombre_chof, "estado": "OCUPADO"
+                            "accion": "cambiar_estado", 
+                            "conductor": nombre_chof, 
+                            "estado": "OCUPADO"
                         })
                     except:
-                        pass 
+                        pass
 
                     # Forzar recarga inmediata
                     st.rerun()
