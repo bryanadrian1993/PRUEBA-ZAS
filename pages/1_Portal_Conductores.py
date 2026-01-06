@@ -13,14 +13,16 @@ import re
 from PIL import Image
 from datetime import datetime
 from streamlit_js_eval import get_geolocation
-from streamlit_autorefresh import st_autorefresh  # <--- ESTO FALTABA PARA QUE EL GPS CAMINE
+from streamlit_autorefresh import st_autorefresh
 import requests
 import streamlit.components.v1 as components
 
+# --- LIBRERIAS NECESARIAS PARA TARIFAS Y HORA ---
+import pytz
+from timezonefinder import TimezoneFinder
+
 # --- 🔗 CONFIGURACIÓN TÉCNICA ---
 st.set_page_config(page_title="Portal Conductores", page_icon="🚖", layout="centered")
-
-
 
 # --- 🔌 CONEXIÓN SEGURA A GOOGLE SHEETS ---
 scopes = [
@@ -40,6 +42,38 @@ DEUDA_MAXIMA = 10.00
 LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO"
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
+
+# --- 🛠️ FUNCIONES RESTAURADAS (NECESARIAS PARA QUE NO DE ERROR) ---
+
+def obtener_hora_gps(latitud, longitud):
+    try:
+        if not latitud or not longitud:
+            return datetime.now(pytz.timezone('America/Guayaquil')).strftime("%Y-%m-%d %H:%M:%S")
+        tf = TimezoneFinder()
+        zona_detectada = tf.timezone_at(lng=float(longitud), lat=float(latitud))
+        if zona_detectada:
+            return datetime.now(pytz.timezone(zona_detectada)).strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            return datetime.now(pytz.timezone('America/Guayaquil')).strftime("%Y-%m-%d %H:%M:%S")
+    except:
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+def obtener_tarifa_local(lat, lon):
+    try:
+        if not lat or not lon:
+            return {"moneda": "USD", "simbolo": "$", "tarifa": 0.50, "pais": "Global"}
+        tf = TimezoneFinder()
+        zona = tf.timezone_at(lng=float(lon), lat=float(lat))
+        if zona:
+            if "Bogota" in zona:
+                return {"moneda": "COP", "simbolo": "$", "tarifa": 2500.00, "pais": "Colombia"}
+            elif "Madrid" in zona or "Ceuta" in zona or "Canary" in zona or "Europe" in zona:
+                return {"moneda": "EUR", "simbolo": "€", "tarifa": 1.20, "pais": "España"}
+            elif "Mexico" in zona:
+                return {"moneda": "MXN", "simbolo": "$", "tarifa": 15.00, "pais": "México"}
+        return {"moneda": "USD", "simbolo": "$", "tarifa": 0.50, "pais": "Ecuador"}
+    except:
+        return {"moneda": "USD", "simbolo": "$", "tarifa": 0.50, "pais": "Ecuador"}
 
 # --- FUNCIÓN DE PAGO PAYPAL ---
 def mostrar_boton_pago(monto_deuda):
@@ -124,18 +158,16 @@ if loc and 'coords' in loc:
     lat_actual = loc['coords']['latitude']
     lon_actual = loc['coords']['longitude']
 
-# --- 🛠️ FUNCIONES ---
+# --- 🛠️ FUNCIONES AUXILIARES ---
 def reproducir_alerta():
-    # Sonido de notificación agradable (Campana tipo Aeropuerto)
     sound_url = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"
-    
-    # Código HTML invisible que fuerza la reproducción
     html_audio = f"""
         <audio autoplay>
         <source src="{sound_url}" type="audio/mp3">
         </audio>
     """
     st.markdown(html_audio, unsafe_allow_html=True)
+
 def cargar_datos(hoja):
     try:
         sh = client.open_by_key(SHEET_ID)
@@ -176,7 +208,8 @@ def actualizar_gps_excel(conductor, lat, lon):
         
         conductores = wks.col_values(1)
         nombre_limpio = conductor.strip().upper()
-        ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Usamos la hora GPS corregida
+        ahora = obtener_hora_gps(lat, lon)
         
         try:
             fila = conductores.index(nombre_limpio) + 1
@@ -255,7 +288,7 @@ if st.session_state.usuario_activo:
         if lat_actual and lon_actual:
             res_gps = actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
             if res_gps:
-                hora = datetime.now().strftime("%H:%M:%S")
+                hora = obtener_hora_gps(lat_actual, lon_actual).split(" ")[1]
                 st.success(f"📡 SEÑAL EN VIVO ({hora})\n📍 Lat: {lat_actual:.5f}, Lon: {lon_actual:.5f}")
         else:
             st.warning("⏳ Buscando señal satelital... (Asegúrate de permitir la ubicación)")
@@ -273,23 +306,16 @@ if st.session_state.usuario_activo:
         
         if deuda_actual >= DEUDA_MAXIMA and "LIBRE" in estado_actual.upper():
             st.toast("🔒 Deuda detectada: Bloqueando en Excel...", icon="🚫")
-            
-            # --- NUEVO: ESCRITURA DIRECTA EN EXCEL (INFALIBLE) ---
             try:
-                # 1. Calculamos la fila exacta en Excel usando el índice que ya encontró la App
                 indice_pandas = fila_actual.index[0] 
-                fila_excel = indice_pandas + 2  # (+2 porque Excel tiene encabezado y empieza en 1)
-                
-                # 2. Conectamos y escribimos directo en la celda
+                fila_excel = indice_pandas + 2
                 sh_lock = client.open_by_key(SHEET_ID)
                 wks_lock = sh_lock.worksheet("CHOFERES")
-                wks_lock.update_cell(fila_excel, 9, "OCUPADO") # La columna 9 es la "I" (Estado)
+                wks_lock.update_cell(fila_excel, 9, "OCUPADO")
             except Exception as e:
                 st.error(f"Error escribiendo en Excel: {e}")
-            # -----------------------------------------------------
-
-            # Forzamos el cambio visual en la App inmediatamente
             estado_actual = "OCUPADO"
+            
         if deuda_actual >= DEUDA_MAXIMA:
             st.error(f"⚠️ TU CUENTA ESTÁ BLOQUEADA. Debes: ${deuda_actual}")
             mostrar_boton_pago(deuda_actual)
@@ -303,7 +329,6 @@ if st.session_state.usuario_activo:
             st.subheader("💳 Centro de Pagos")
             st.warning(f"Saldo pendiente: **${deuda_actual:.2f}**")
             
-            # --- CORRECCIÓN: UN SOLO MENÚ DE PESTAÑAS PARA TODO ---
             tab_deuna, tab_paypal = st.tabs(["📲 Pagar con DEUNA", "🌎 Pagar con PAYPAL"])
             
             with tab_deuna:
@@ -325,15 +350,10 @@ if st.session_state.usuario_activo:
             
             with tab_paypal:
                 st.subheader("🌎 Pagar con PayPal")
-                
-                # --- ARREGLO DEL ERROR DE PANTALLA ROJA ---
                 val_sugerido = float(deuda_actual)
-                if val_sugerido < 1.00: 
-                    val_sugerido = 1.00
-                
+                if val_sugerido < 1.00: val_sugerido = 1.00
                 st.write("Confirma o escribe la cantidad a pagar:")
                 monto_final = st.number_input("Monto a Pagar ($):", min_value=1.00, value=val_sugerido, step=1.00)
-                
                 cedula_usuario = str(fila_actual.iloc[0].get('Cedula', '0000000000'))
                 client_id = "AbTSfP381kOrNXmRJO8SR7IvjtjLx0Qmj1TyERiV5RzVheYAAxvgGWHJam3KE_iyfcrf56VV_k-MPYmv"
                 
@@ -383,57 +403,41 @@ if st.session_state.usuario_activo:
         viaje_activo = pd.DataFrame() 
         
         if not df_viajes.empty and 'Conductor' in df_viajes.columns:
-            # Filtramos los viajes EN CURSO para este conductor
             viaje_activo = df_viajes[
                 (df_viajes['Conductor'].astype(str).str.upper() == nombre_completo_unificado) & 
                 (df_viajes['Estado'].astype(str) == "EN CURSO")
             ]
             
-        # --- LÓGICA DE SONIDO DE NOTIFICACIÓN ---
-        # 1. Creamos una memoria para saber cuál fue el último viaje que avisamos
         if 'ultimo_viaje_avisado' not in st.session_state:
             st.session_state.ultimo_viaje_avisado = ""
 
         if not viaje_activo.empty:
-            # Identificamos el viaje actual usando Cliente + Fecha (para que sea único)
             datos_v = viaje_activo.iloc[-1]
             id_viaje_actual = f"{datos_v.get('Cliente')}_{datos_v.get('Fecha')}"
-            
-            # Si el viaje que vemos es DIFERENTE al último avisado -> ¡DING DING! 🔔
             if st.session_state.ultimo_viaje_avisado != id_viaje_actual:
                 reproducir_alerta()
                 st.toast("🔔 ¡NUEVO VIAJE ASIGNADO!", icon="🚖")
-                st.session_state.ultimo_viaje_avisado = id_viaje_actual # Guardamos para no repetir
+                st.session_state.ultimo_viaje_avisado = id_viaje_actual
         
-        # ----------------------------------------
-
         if not viaje_activo.empty and "OCUPADO" in estado_actual:
             datos_v = viaje_activo.iloc[-1]
-            
             st.warning("🚖 TIENES UN PASAJERO A BORDO")
             st.write(f"👤 **Cliente:** {datos_v.get('Cliente', 'S/D')}")
             st.write(f"📞 **Tel:** {datos_v.get('Tel Cliente', 'S/D')}")
             st.write(f"📍 **Destino:** {datos_v.get('Referencia', 'S/D')}")
             st.markdown(f"[🗺️ Ver Mapa]({datos_v.get('Mapa', '#')})")
-            
             st.divider()
 
-            # --- LÓGICA DE COBRO BLINDADA (PARA QUE FUNCIONE A LA PRIMERA) ---
-            
-            # 1. Inicializar la bandera si no existe
             if "cobro_realizado" not in st.session_state:
                 st.session_state.cobro_realizado = False
 
-            # 2. Si NO hemos cobrado todavía, mostramos el botón
             if not st.session_state.cobro_realizado:
                 with st.form("form_cobrar_viaje"):
                     st.write("¿Llegaste al destino?")
-                    # Usamos form_submit_button que es resistente a recargas
                     boton_cobrar = st.form_submit_button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True)
                 
                 if boton_cobrar:
                     st.session_state.cobro_realizado = True
-                    
                     with st.spinner("⏳ Calculando tarifa según tu país..."):
                         try:
                             # 1. Detectar Configuración Local (Moneda y Precio)
@@ -444,10 +448,8 @@ if st.session_state.usuario_activo:
                             pais = config_local["pais"]
 
                             link_mapa = str(datos_v.get('Mapa', ''))
-                            distancia = 2.0 # Distancia mínima por defecto
+                            distancia = 2.0
                             
-                            # ... (Aquí va tu lógica de cálculo de distancia que ya tenías) ...
-                            # Intento de cálculo de distancia real
                             try:
                                 numeros = re.findall(r'-?\d+\.\d+', link_mapa)
                                 if len(numeros) >= 2:
@@ -467,18 +469,16 @@ if st.session_state.usuario_activo:
                             # 2. CÁLCULO DE LA COMISIÓN CON TARIFA LOCAL
                             comision_nueva = round(distancia * tarifa_km, 2)
                             
-                            # Enviar a Google Sheets
                             res = enviar_datos_a_sheets({
                                 "accion": "finalizar_y_deuda",
                                 "conductor": nombre_completo_unificado,
                                 "comision": comision_nueva,
                                 "km": round(distancia, 2),
-                                "moneda": moneda  # Enviamos la moneda al Excel para saber
+                                "moneda": moneda
                             })
                             
                             if res == "Ok" or "Ok" in str(res):
                                 st.success(f"✅ ¡VIAJE EN {pais.upper()} FINALIZADO!")
-                                # Mostramos el precio con su símbolo correcto
                                 st.metric(label="Comisión Generada", value=f"{simbolo} {comision_nueva:.2f} {moneda}")
                                 st.balloons()
                                 time.sleep(4)
@@ -490,24 +490,16 @@ if st.session_state.usuario_activo:
                         except Exception as e:
                             st.error(f"❌ Error técnico: {e}")
                             st.session_state.cobro_realizado = False
-            
-            # 4. Si YA le dimos al botón, mostramos mensaje de espera en lugar del formulario
-            
         else:
-            # --- 1. CONTROL INTELIGENTE DE GPS ---
-            # Si debe menos de $10, el GPS funciona. Si debe más, se pausa para dejarte pagar.
             if deuda_actual < 10.00:
                 st_autorefresh(interval=10000, key="gps_chofer")
             else:
                 st.caption("⏸️ GPS en pausa mientras realizas el pago.")
 
-            # --- 2. LÓGICA DE BLOQUEO O TRABAJO ---
             if deuda_actual >= 10.00:
-                # CASO A: CHOFER BLOQUEADO
                 st.error(f"🚫 CUENTA BLOQUEADA: Tu deuda (${deuda_actual:.2f}) supera el límite de $10.00")
                 st.button("🟢 PONERME LIBRE", disabled=True)
             else:
-                # CASO B: CHOFER ACTIVO (Puede trabajar)
                 if "OCUPADO" in estado_actual:
                     st.info("Estás en estado OCUPADO.")
                 
@@ -516,21 +508,15 @@ if st.session_state.usuario_activo:
             with col_lib:
                 if st.button("🟢 PONERME LIBRE", use_container_width=True):
                     try:
-                        # --- ESCRITURA DIRECTA (BLINDADA) ---
                         indice_pandas = fila_actual.index[0] 
                         fila_excel = indice_pandas + 2
-                        
                         sh_status = client.open_by_key(SHEET_ID)
                         wks_status = sh_status.worksheet("CHOFERES")
-                        wks_status.update_cell(fila_excel, 9, "LIBRE") # Columna I es la 9
-                        # ------------------------------------
-                        
-                        # Actualizamos GPS también para asegurar
+                        wks_status.update_cell(fila_excel, 9, "LIBRE")
                         if lat_actual and lon_actual:
                             actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
-                            
                         st.toast("✅ Estado cambiado a LIBRE", icon="🟢")
-                        time.sleep(1) # Pequeña pausa para asegurar
+                        time.sleep(1)
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error cambiando estado: {e}")
@@ -538,15 +524,11 @@ if st.session_state.usuario_activo:
             with col_ocu:
                 if st.button("🔴 PONERME OCUPADO", use_container_width=True):
                     try:
-                        # --- ESCRITURA DIRECTA (BLINDADA) ---
                         indice_pandas = fila_actual.index[0] 
                         fila_excel = indice_pandas + 2
-                        
                         sh_status = client.open_by_key(SHEET_ID)
                         wks_status = sh_status.worksheet("CHOFERES")
-                        wks_status.update_cell(fila_excel, 9, "OCUPADO") # Columna I es la 9
-                        # ------------------------------------
-                        
+                        wks_status.update_cell(fila_excel, 9, "OCUPADO")
                         st.toast("⏸️ Estado cambiado a OCUPADO", icon="🔴")
                         time.sleep(1)
                         st.rerun()
@@ -660,9 +642,12 @@ else:
                             sh = client.open_by_key(SHEET_ID)
                             wks = sh.worksheet("CHOFERES")
                             # --- SE GUARDA COMO VALIDADO "SI" AUTOMÁTICAMENTE ---
-                            # --- SOLUCIÓN DE POSICIONAMIENTO DE COLUMNAS ---
+                            # --- USAMOS LA HORA MUNDIAL ---
+                            hora_registro = obtener_hora_gps(lat_actual, lon_actual)
+                            # ------------------------------
+
                             nueva_fila = [
-                                datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # A: Fecha
+                                hora_registro, # A: Fecha (CON HORA MUNDIAL)
                                 r_nom, # B: Nombre
                                 r_ape, # C: Apellido
                                 r_ced, # D: Cedula
