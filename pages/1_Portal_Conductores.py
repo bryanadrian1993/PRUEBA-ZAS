@@ -195,7 +195,7 @@ def cargar_datos(hoja):
 
 def enviar_datos(datos):
     try:
-        # Usamos POST para soportar fotos pesadas
+        # Usamos POST (data=datos) para enviar la foto completa sin que se corte
         response = requests.post(URL_SCRIPT, data=datos)
         return response.text
     except Exception as e: return f"Error: {e}"
