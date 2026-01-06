@@ -17,7 +17,7 @@ from streamlit_autorefresh import st_autorefresh
 import requests
 import streamlit.components.v1 as components
 
-# --- LIBRERIAS NECESARIAS PARA TARIFAS Y HORA ---
+# --- LIBRERIAS NECESARIAS ---
 import pytz
 from timezonefinder import TimezoneFinder
 
@@ -37,13 +37,13 @@ except Exception as e:
     st.error(f"⚠️ Error de configuración de secretos: {e}")
 
 # --- ⚙️ CONFIGURACIÓN DE NEGOCIO ---
-TARIFA_POR_KM = 0.05
+TARIFA_POR_KM = 0.05  # <--- CONFIRMADO: 5 CENTAVOS
 DEUDA_MAXIMA = 10.00
 LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO"
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
 
-# --- 🛠️ FUNCIONES RESTAURADAS (NECESARIAS PARA QUE NO DE ERROR) ---
+# --- 🛠️ FUNCIONES ---
 
 def obtener_hora_gps(latitud, longitud):
     try:
@@ -70,19 +70,17 @@ def obtener_tarifa_local(lat, lon):
         zona = tf.timezone_at(lng=float(lon), lat=float(lat))
         
         if zona:
-            # 🇨🇴 COLOMBIA (Pesos)
+            # 🇨🇴 COLOMBIA
             if "Bogota" in zona:
-                return {"moneda": "COP", "simbolo": "$", "tarifa": 250.00, "pais": "Colombia"} # Ajustado a proporción similar
-            
-            # 🇪🇸 ESPAÑA (Euros)
+                return {"moneda": "COP", "simbolo": "$", "tarifa": 250.00, "pais": "Colombia"}
+            # 🇪🇸 ESPAÑA
             elif "Madrid" in zona or "Ceuta" in zona or "Canary" in zona or "Europe" in zona:
-                return {"moneda": "EUR", "simbolo": "€", "tarifa": 0.05, "pais": "España"} # 5 céntimos de Euro
-            
-            # 🇲🇽 MÉXICO (Pesos Mexicanos)
+                return {"moneda": "EUR", "simbolo": "€", "tarifa": 0.05, "pais": "España"}
+            # 🇲🇽 MÉXICO
             elif "Mexico" in zona:
-                return {"moneda": "MXN", "simbolo": "$", "tarifa": 1.00, "pais": "México"} # 1 Peso aprox
+                return {"moneda": "MXN", "simbolo": "$", "tarifa": 1.00, "pais": "México"}
 
-        # 🇪🇨 ECUADOR / RESTO DEL MUNDO
+        # 🇪🇨 ECUADOR / RESTO DEL MUNDO (Dólares)
         return {"moneda": "USD", "simbolo": "$", "tarifa": tarifa_base_usd, "pais": "Ecuador"}
             
     except:
@@ -171,7 +169,7 @@ if loc and 'coords' in loc:
     lat_actual = loc['coords']['latitude']
     lon_actual = loc['coords']['longitude']
 
-# --- 🛠️ FUNCIONES AUXILIARES ---
+# --- 🛠️ FUNCIONES ---
 def reproducir_alerta():
     sound_url = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"
     html_audio = f"""
@@ -221,7 +219,6 @@ def actualizar_gps_excel(conductor, lat, lon):
         
         conductores = wks.col_values(1)
         nombre_limpio = conductor.strip().upper()
-        # Usamos la hora GPS corregida
         ahora = obtener_hora_gps(lat, lon)
         
         try:
@@ -301,7 +298,7 @@ if st.session_state.usuario_activo:
         if lat_actual and lon_actual:
             res_gps = actualizar_gps_excel(nombre_completo_unificado, lat_actual, lon_actual)
             if res_gps:
-                hora = obtener_hora_gps(lat_actual, lon_actual).split(" ")[1]
+                hora = obtener_hora_gps(lat_actual, lon_actual).split(" ")[1] # Solo mostramos la hora
                 st.success(f"📡 SEÑAL EN VIVO ({hora})\n📍 Lat: {lat_actual:.5f}, Lon: {lon_actual:.5f}")
         else:
             st.warning("⏳ Buscando señal satelital... (Asegúrate de permitir la ubicación)")
@@ -319,16 +316,17 @@ if st.session_state.usuario_activo:
         
         if deuda_actual >= DEUDA_MAXIMA and "LIBRE" in estado_actual.upper():
             st.toast("🔒 Deuda detectada: Bloqueando en Excel...", icon="🚫")
+            
             try:
                 indice_pandas = fila_actual.index[0] 
                 fila_excel = indice_pandas + 2
                 sh_lock = client.open_by_key(SHEET_ID)
                 wks_lock = sh_lock.worksheet("CHOFERES")
-                wks_lock.update_cell(fila_excel, 9, "OCUPADO")
+                wks_lock.update_cell(fila_excel, 9, "OCUPADO") # La columna 9 es la "I" (Estado)
             except Exception as e:
                 st.error(f"Error escribiendo en Excel: {e}")
+
             estado_actual = "OCUPADO"
-            
         if deuda_actual >= DEUDA_MAXIMA:
             st.error(f"⚠️ TU CUENTA ESTÁ BLOQUEADA. Debes: ${deuda_actual}")
             mostrar_boton_pago(deuda_actual)
@@ -364,9 +362,12 @@ if st.session_state.usuario_activo:
             with tab_paypal:
                 st.subheader("🌎 Pagar con PayPal")
                 val_sugerido = float(deuda_actual)
-                if val_sugerido < 1.00: val_sugerido = 1.00
+                if val_sugerido < 1.00: 
+                    val_sugerido = 1.00
+                
                 st.write("Confirma o escribe la cantidad a pagar:")
                 monto_final = st.number_input("Monto a Pagar ($):", min_value=1.00, value=val_sugerido, step=1.00)
+                
                 cedula_usuario = str(fila_actual.iloc[0].get('Cedula', '0000000000'))
                 client_id = "AbTSfP381kOrNXmRJO8SR7IvjtjLx0Qmj1TyERiV5RzVheYAAxvgGWHJam3KE_iyfcrf56VV_k-MPYmv"
                 
@@ -451,6 +452,7 @@ if st.session_state.usuario_activo:
                 
                 if boton_cobrar:
                     st.session_state.cobro_realizado = True
+                    
                     with st.spinner("⏳ Calculando tarifa según tu país..."):
                         try:
                             # 1. Detectar Configuración Local (Moneda y Precio)
@@ -468,6 +470,7 @@ if st.session_state.usuario_activo:
                                 if len(numeros) >= 2:
                                     lat_cli = float(numeros[-2])
                                     lon_cli = float(numeros[-1])
+                                    
                                     dLat = math.radians(lat_actual - lat_cli)
                                     dLon = math.radians(lon_actual - lon_cli)
                                     a = math.sin(dLat/2)**2 + math.cos(math.radians(lat_cli)) * \
@@ -482,6 +485,7 @@ if st.session_state.usuario_activo:
                             # 2. CÁLCULO DE LA COMISIÓN CON TARIFA LOCAL
                             comision_nueva = round(distancia * tarifa_km, 2)
                             
+                            # Enviar a Google Sheets
                             res = enviar_datos_a_sheets({
                                 "accion": "finalizar_y_deuda",
                                 "conductor": nombre_completo_unificado,
@@ -503,6 +507,7 @@ if st.session_state.usuario_activo:
                         except Exception as e:
                             st.error(f"❌ Error técnico: {e}")
                             st.session_state.cobro_realizado = False
+            
         else:
             if deuda_actual < 10.00:
                 st_autorefresh(interval=10000, key="gps_chofer")
