@@ -11,7 +11,7 @@ st.set_page_config(page_title="Admin Panel", page_icon="👮‍♂️", layout="
 # 🆔 CONEXIÓN
 SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbwzOVH8c8f9WEoE4OJOTIccz_EgrOpZ8ySURTVRwi0bnQhFnWVdgfX1W8ivTIu5dFfs/exec"
-ADMIN_PASSWORD = "admin123"
+ADMIN_PASSWORD = "VonVerdi1993@"
 
 # --- FUNCIONES ---
 def cargar_datos(hoja):
