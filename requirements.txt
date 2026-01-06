@@ -7,3 +7,4 @@ streamlit-autorefresh
 Pillow
 requests
 streamlit-javascript
+timezonefinder
