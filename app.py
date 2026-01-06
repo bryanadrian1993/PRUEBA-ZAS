@@ -4,7 +4,6 @@ from datetime import datetime
 import streamlit as st
 import pandas as pd
 from streamlit_js_eval import get_geolocation
-from datetime import datetime
 import urllib.parse
 import urllib.request
 import json
@@ -25,9 +24,9 @@ URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4
 LAT_BASE, LON_BASE = -0.466657, -76.989635
 
 # Inicialización de estados
-if 'viaje_confirmado' not in st.session_state: 
+if 'viaje_confirmado' not in st.session_state:
     st.session_state.viaje_confirmado = False
-if 'datos_pedido' not in st.session_state: 
+if 'datos_pedido' not in st.session_state:
     st.session_state.datos_pedido = {}
 if 'gps_ready' not in st.session_state:
     st.session_state.gps_ready = False
@@ -37,8 +36,6 @@ if 'ultima_lon' not in st.session_state:
     st.session_state.ultima_lon = None
 if 'debug_mode' not in st.session_state:
     st.session_state.debug_mode = False
-
-
 
 # 🎨 ESTILOS CSS
 st.markdown("""
@@ -63,7 +60,7 @@ def calcular_distancia_real(lat1, lon1, lat2, lon2):
         dlat, dlon = math.radians(lat2-lat1), math.radians(lon2-lon1)
         a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
         return 2 * math.atan2(math.sqrt(a), math.sqrt(1-a)) * R
-    except: 
+    except:
         return 0.0
 
 def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
@@ -75,6 +72,7 @@ def obtener_ruta_carretera(lon1, lat1, lon2, lat2):
             return [{"path": data['routes'][0]['geometry']['coordinates']}]
     except:
         return [{"path": [[lon1, lat1], [lon2, lat2]]}]
+
 def obtener_hora_gps(latitud, longitud):
     try:
         if not latitud or not longitud:
@@ -82,7 +80,7 @@ def obtener_hora_gps(latitud, longitud):
             return datetime.now(pytz.timezone('America/Guayaquil')).strftime("%Y-%m-%d %H:%M:%S")
 
         tf = TimezoneFinder()
-        zona = tf.timezone_at(lng=float(longitud), lat=float(latitud)) 
+        zona = tf.timezone_at(lng=float(longitud), lat=float(latitud))
         
         if zona:
             return datetime.now(pytz.timezone(zona)).strftime("%Y-%m-%d %H:%M:%S")
@@ -91,6 +89,7 @@ def obtener_hora_gps(latitud, longitud):
             
     except:
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
 def cargar_datos(hoja):
     try:
         cb = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -98,7 +97,7 @@ def cargar_datos(hoja):
         df = pd.read_csv(url)
         df.columns = df.columns.str.strip().str.upper()
         return df
-    except: 
+    except:
         return pd.DataFrame()
 
 def enviar_datos_a_sheets(datos):
@@ -183,147 +182,6 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
         return mejor_chofer, t, foto, placa
     
     return None, None, None, "S/P"
-    
-    # Mostrar columnas
-    st.write("📋 Columnas en CHOFERES:")
-    st.write(df_c.columns.tolist())
-    st.write("📋 Columnas en UBICACIONES:")
-    st.write(df_u.columns.tolist())
-    
-    # Mostrar TODOS los datos de CHOFERES
-    st.write("👥 DATOS COMPLETOS DE CHOFERES:")
-    st.dataframe(df_c)
-    
-    # Verificar columna ESTADO
-    if 'ESTADO' not in df_c.columns:
-        st.error("❌ NO existe columna ESTADO")
-        return None, None, None, "Error Cols"
-    
-    st.write(f"📊 Estados en CHOFERES: {df_c['ESTADO'].unique()}")
-    
-    # Mostrar cada conductor y su estado
-    for idx, row in df_c.iterrows():
-        nombre = f"{row.get('NOMBRE', '')} {row.get('APELLIDO', '')}"
-        estado = row.get('ESTADO', 'SIN ESTADO')
-        st.write(f"  - {nombre}: Estado = '{estado}' (tipo: {type(estado)})")
-    
-    tipo_b = tipo_sol.split(" ")[0].upper()
-    st.write(f"🔎 Buscando tipo: **{tipo_b}**")
-
-    # FILTRO 1: Solo conductores LIBRES
-    st.write("🔍 Aplicando filtro ESTADO == LIBRE...")
-    libres = df_c[df_c['ESTADO'].astype(str).str.upper().str.strip() == 'LIBRE']
-    
-    st.write(f"✅ Conductores con ESTADO=LIBRE: **{len(libres)}**")
-    
-    if len(libres) == 0:
-        st.error("❌ NO HAY CONDUCTORES LIBRES")
-        st.write("Intentando con estados diferentes...")
-        
-        # Mostrar qué estados hay
-        for estado_unico in df_c['ESTADO'].unique():
-            count = len(df_c[df_c['ESTADO'] == estado_unico])
-            st.write(f"  - Estado '{estado_unico}': {count} conductores")
-        
-        # MODO EMERGENCIA: Aceptar CUALQUIER estado
-        st.warning("⚠️ MODO EMERGENCIA: Aceptando TODOS los estados")
-        libres = df_c.copy()
-    
-    # FILTRO 2: Tipo de vehículo
-    if 'TIPO_VEHICULO' in libres.columns:
-        st.write(f"🚗 Tipos disponibles: {libres['TIPO_VEHICULO'].unique()}")
-        
-        antes = len(libres)
-        libres = libres[libres['TIPO_VEHICULO'].astype(str).str.upper().str.contains(tipo_b, na=False)]
-        st.write(f"Después de filtro tipo {tipo_b}: {len(libres)} (eliminados: {antes - len(libres)})")
-        
-        if len(libres) == 0:
-            st.error(f"❌ No hay conductores tipo {tipo_b}")
-            st.warning("Aceptando CUALQUIER tipo de vehículo")
-            libres = df_c.copy()
-    else:
-        st.warning("⚠️ No existe TIPO_VEHICULO")
-
-    # FILTRO 3: Deuda
-    if 'DEUDA' in libres.columns:
-        antes = len(libres)
-        libres = libres[pd.to_numeric(libres['DEUDA'], errors='coerce').fillna(0) < 10.00]
-        st.write(f"Después de filtro deuda: {len(libres)} (eliminados: {antes - len(libres)})")
-
-    if libres.empty:
-        st.error("❌ No quedan conductores después de TODOS los filtros")
-        return None, None, None, "S/P"
-
-    st.write(f"✅ Conductores candidatos: **{len(libres)}**")
-    
-    # Buscar ubicaciones
-    col_cond_u = next((c for c in df_u.columns if "CONDUCTOR" in c.upper()), None)
-    col_lat_u = next((c for c in df_u.columns if "LAT" in c.upper()), None)
-    col_lon_u = next((c for c in df_u.columns if "LON" in c.upper()), None)
-
-    st.write(f"📍 Columnas encontradas en UBICACIONES:")
-    st.write(f"  - Conductor: {col_cond_u}")
-    st.write(f"  - Latitud: {col_lat_u}")
-    st.write(f"  - Longitud: {col_lon_u}")
-
-    if not (col_cond_u and col_lat_u and col_lon_u):
-        st.error("❌ Faltan columnas en UBICACIONES")
-        st.write("DATOS DE UBICACIONES:")
-        st.dataframe(df_u)
-        return None, None, None, "Error Ubi Cols"
-
-    df_u['KEY_CLEAN'] = df_u[col_cond_u].astype(str).str.strip().str.upper()
-    
-    st.write("📍 Conductores en UBICACIONES:")
-    st.write(df_u[['KEY_CLEAN', col_lat_u, col_lon_u]].to_string())
-
-    mejor_chofer = None
-    menor_distancia = float('inf')
-
-    st.write("🔄 Buscando el más cercano...")
-    
-    for idx, chofer in libres.iterrows():
-        n = str(chofer.get('NOMBRE', '')).replace('nan','').strip()
-        a = str(chofer.get('APELLIDO', '')).replace('nan','').strip()
-        nombre_completo = f"{n} {a}".strip().upper()
-        
-        st.write(f"🔎 Buscando: **{nombre_completo}**")
-
-        ubi = df_u[df_u['KEY_CLEAN'] == nombre_completo]
-        
-        if not ubi.empty:
-            try:
-                lat_cond = float(ubi.iloc[-1][col_lat_u])
-                lon_cond = float(ubi.iloc[-1][col_lon_u])
-                
-                st.write(f"  ✅ Ubicación: {lat_cond}, {lon_cond}")
-                
-                d = calcular_distancia_real(lat_cli, lon_cli, lat_cond, lon_cond)
-                
-                st.write(f"  📏 Distancia: **{d:.2f} km**")
-                
-                if d < 10000 and d < menor_distancia:
-                    menor_distancia = d
-                    mejor_chofer = chofer
-                    st.success(f"  🎯 ¡MEJOR CANDIDATO hasta ahora!")
-            except Exception as e:
-                st.error(f"  ❌ Error: {e}")
-                continue
-        else:
-            st.warning(f"  ⚠️ NO tiene ubicación GPS registrada")
-
-    st.write("="*50)
-    
-    if mejor_chofer is not None:
-        t = str(mejor_chofer.get('TELEFONO', '0000000000')).split('.')[0].strip()
-        foto = str(mejor_chofer.get('FOTO_PERFIL', 'SIN_FOTO'))
-        placa = str(mejor_chofer.get('PLACA', 'S/P'))
-        n_final = f"{mejor_chofer.get('NOMBRE')} {mejor_chofer.get('APELLIDO')}"
-        st.success(f"🎉 CONDUCTOR SELECCIONADO: {n_final} ({menor_distancia:.2f} km)")
-        return mejor_chofer, t, foto, placa
-    
-    st.error("❌ NO SE ENCONTRÓ NINGÚN CONDUCTOR VÁLIDO")
-    return None, None, None, "S/P"
 
 # --- 📱 INTERFAZ ---
 st.markdown('<div class="main-title">🚖 TAXI SEGURO</div>', unsafe_allow_html=True)
@@ -388,8 +246,8 @@ if not st.session_state.viaje_confirmado:
 
                     # --- CAMBIO DE ESTADO INMEDIATO ---
                     st.session_state.datos_pedido = {
-                        "chof": nombre_chof, "t_chof": t_chof, "foto": foto_chof, "placa": placa, 
-                        "id": id_v, "mapa": mapa_url, "lat_cli": lat_actual, "lon_cli": lon_actual, 
+                        "chof": nombre_chof, "t_chof": t_chof, "foto": foto_chof, "placa": placa,
+                        "id": id_v, "mapa": mapa_url, "lat_cli": lat_actual, "lon_cli": lon_actual,
                         "nombre": nombre_cli, "ref": ref_cli
                     }
                     st.session_state.viaje_confirmado = True
@@ -397,21 +255,21 @@ if not st.session_state.viaje_confirmado:
                     # --- ENVIAR A EXCEL (CON HORA MUNDIAL) ---
                     try:
                         enviar_datos_a_sheets({
-                            "accion": "registrar_pedido", 
-                            "id_viaje": id_v, 
+                            "accion": "registrar_pedido",
+                            "id_viaje": id_v,
                             "cliente": nombre_cli,
-                            "Fecha": obtener_hora_gps(lat_actual, lon_actual), # <--- HORA MUNDIAL
-                            "tel_cliente": celular_input, 
-                            "referencia": ref_cli, 
-                            "conductor": nombre_chof, 
-                            "tel_conductor": t_chof, 
+                            "Fecha": obtener_hora_gps(lat_actual, lon_actual),
+                            "tel_cliente": celular_input,
+                            "referencia": ref_cli,
+                            "conductor": nombre_chof,
+                            "tel_conductor": t_chof,
                             "mapa": mapa_url
                         })
                         enviar_datos_a_sheets({
                             "accion": "cambiar_estado", "conductor": nombre_chof, "estado": "OCUPADO"
                         })
                     except:
-                        pass 
+                        pass
 
                     # Forzar recarga inmediata
                     st.rerun()
@@ -455,7 +313,7 @@ else:
         f'<a href="https://api.whatsapp.com/send?phone={dp["t_chof"]}&text={msg_wa}" '
         f'target="_blank" style="background-color:#25D366;color:white;padding:15px;'
         f'text-align:center;display:block;text-decoration:none;font-weight:bold;'
-        f'font-size:18px;border-radius:10px;margin:15px 0;">📲 CLICK AQUI PEDIR TAXI (WHATSAPP)</a>', 
+        f'font-size:18px;border-radius:10px;margin:15px 0;">📲 CLICK AQUI PEDIR TAXI (WHATSAPP)</a>',
         unsafe_allow_html=True
     )
 
@@ -510,9 +368,9 @@ else:
                 st.pydeck_chart(pdk.Deck(
                     map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
                     initial_view_state=pdk.ViewState(
-                        latitude=(lat_t + dp['lat_cli'])/2, 
-                        longitude=(lon_t + dp['lon_cli'])/2, 
-                        zoom=13.5, 
+                        latitude=(lat_t + dp['lat_cli'])/2,
+                        longitude=(lon_t + dp['lon_cli'])/2,
+                        zoom=13.5,
                         pitch=0
                     ),
                     tooltip={"text": "{info}"},
