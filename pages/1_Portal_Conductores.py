@@ -195,10 +195,9 @@ def cargar_datos(hoja):
 
 def enviar_datos(datos):
     try:
-        params = urllib.parse.urlencode(datos)
-        url_final = f"{URL_SCRIPT}?{params}"
-        with urllib.request.urlopen(url_final) as response:
-            return response.read().decode('utf-8')
+        # Usamos POST para soportar fotos pesadas
+        response = requests.post(URL_SCRIPT, data=datos)
+        return response.text
     except Exception as e: return f"Error: {e}"
 
 def enviar_datos_a_sheets(datos):
