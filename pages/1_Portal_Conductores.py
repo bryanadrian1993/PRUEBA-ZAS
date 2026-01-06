@@ -432,21 +432,27 @@ if st.session_state.usuario_activo:
                     boton_cobrar = st.form_submit_button("🏁 FINALIZAR VIAJE Y COBRAR", type="primary", use_container_width=True)
                 
                 if boton_cobrar:
-                    # 3. BLOQUEO INMEDIATO: Ocultamos el botón visualmente
                     st.session_state.cobro_realizado = True
                     
-                    with st.spinner("⏳ Procesando cobro y finalizando viaje..."):
+                    with st.spinner("⏳ Calculando tarifa según tu país..."):
                         try:
+                            # 1. Detectar Configuración Local (Moneda y Precio)
+                            config_local = obtener_tarifa_local(lat_actual, lon_actual)
+                            tarifa_km = config_local["tarifa"]
+                            moneda = config_local["moneda"]
+                            simbolo = config_local["simbolo"]
+                            pais = config_local["pais"]
+
                             link_mapa = str(datos_v.get('Mapa', ''))
-                            distancia = 2.0
+                            distancia = 2.0 # Distancia mínima por defecto
                             
+                            # ... (Aquí va tu lógica de cálculo de distancia que ya tenías) ...
                             # Intento de cálculo de distancia real
                             try:
                                 numeros = re.findall(r'-?\d+\.\d+', link_mapa)
                                 if len(numeros) >= 2:
                                     lat_cli = float(numeros[-2])
                                     lon_cli = float(numeros[-1])
-                                    
                                     dLat = math.radians(lat_actual - lat_cli)
                                     dLon = math.radians(lon_actual - lon_cli)
                                     a = math.sin(dLat/2)**2 + math.cos(math.radians(lat_cli)) * \
@@ -457,28 +463,33 @@ if st.session_state.usuario_activo:
                                 pass
                             
                             if distancia < 1.0: distancia = 1.0
-                            comision_nueva = round(distancia * TARIFA_POR_KM, 2)
+                            
+                            # 2. CÁLCULO DE LA COMISIÓN CON TARIFA LOCAL
+                            comision_nueva = round(distancia * tarifa_km, 2)
                             
                             # Enviar a Google Sheets
                             res = enviar_datos_a_sheets({
                                 "accion": "finalizar_y_deuda",
                                 "conductor": nombre_completo_unificado,
                                 "comision": comision_nueva,
-                                "km": round(distancia, 2)
+                                "km": round(distancia, 2),
+                                "moneda": moneda  # Enviamos la moneda al Excel para saber
                             })
                             
                             if res == "Ok" or "Ok" in str(res):
-                                st.success(f"✅ ¡VIAJE FINALIZADO! Comisión: ${comision_nueva}")
+                                st.success(f"✅ ¡VIAJE EN {pais.upper()} FINALIZADO!")
+                                # Mostramos el precio con su símbolo correcto
+                                st.metric(label="Comisión Generada", value=f"{simbolo} {comision_nueva:.2f} {moneda}")
                                 st.balloons()
-                                time.sleep(3) # Damos tiempo a que Excel procese
-                                st.session_state.cobro_realizado = False # Reseteamos para el futuro
+                                time.sleep(4)
+                                st.session_state.cobro_realizado = False
                                 st.rerun()
                             else:
-                                st.error("❌ Error de conexión. Intenta de nuevo.")
-                                st.session_state.cobro_realizado = False # Desbloqueamos si falló
+                                st.error("❌ Error de conexión.")
+                                st.session_state.cobro_realizado = False
                         except Exception as e:
                             st.error(f"❌ Error técnico: {e}")
-                            st.session_state.cobro_realizado = False # Desbloqueamos si falló
+                            st.session_state.cobro_realizado = False
             
             # 4. Si YA le dimos al botón, mostramos mensaje de espera en lugar del formulario
             
