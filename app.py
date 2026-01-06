@@ -118,8 +118,6 @@ def enviar_datos_a_sheets(datos):
         return f"Error: {str(e)}"
 
 def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
-    # Nota: He quitado los st.write para que no salgan letras en pantalla
-    
     df_c = cargar_datos("CHOFERES")
     df_u = cargar_datos("UBICACIONES")
     
@@ -139,7 +137,7 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
     if 'TIPO_VEHICULO' in libres.columns:
         libres = libres[libres['TIPO_VEHICULO'].astype(str).str.upper().str.contains(tipo_b, na=False)]
         if len(libres) == 0:
-            libres = df_c.copy() # Fallback si no hay del tipo exacto
+            libres = df_c.copy()
 
     # Preparar columnas
     col_cond_u = next((c for c in df_u.columns if "CONDUCTOR" in c.upper()), None)
@@ -276,6 +274,7 @@ if not st.session_state.viaje_confirmado:
                     
                 else:
                     st.error("⚠️ No hay conductores disponibles. Intenta de nuevo.")
+
 # --- PANTALLA DE VIAJE ACTIVO ---
 else:
     dp = st.session_state.datos_pedido
