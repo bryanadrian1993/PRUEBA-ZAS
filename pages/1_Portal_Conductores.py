@@ -1,6 +1,3 @@
-import pytz
-from timezonefinder import TimezoneFinder
-from datetime import datetime
 import streamlit as st
 import gspread
 from google.oauth2.service_account import Credentials
@@ -139,31 +136,6 @@ def reproducir_alerta():
         </audio>
     """
     st.markdown(html_audio, unsafe_allow_html=True)
-    def obtener_hora_gps(latitud, longitud):
-    try:
-        # 1. Si no hay GPS válido, devolvemos hora de Ecuador por defecto
-        if not latitud or not longitud:
-            zona_defecto = pytz.timezone('America/Guayaquil')
-            return datetime.now(zona_defecto).strftime("%Y-%m-%d %H:%M:%S")
-
-        # 2. Buscamos en qué país/zona cae esa coordenada
-        tf = TimezoneFinder()
-        zona_detectada = tf.timezone_at(lng=float(longitud), lat=float(latitud)) 
-        
-        if zona_detectada:
-            # 3. Convertimos la hora a esa zona exacta
-            zona_horaria = pytz.timezone(zona_detectada)
-            hora_local = datetime.now(zona_horaria)
-            return hora_local.strftime("%Y-%m-%d %H:%M:%S")
-        else:
-            # Si cae en el mar, usamos Ecuador por defecto
-            zona_defecto = pytz.timezone('America/Guayaquil')
-            return datetime.now(zona_defecto).strftime("%Y-%m-%d %H:%M:%S")
-            
-    except Exception as e:
-        # Si algo explota, hora del servidor (UTC)
-        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-# ---------------------------------
 def cargar_datos(hoja):
     try:
         sh = client.open_by_key(SHEET_ID)
