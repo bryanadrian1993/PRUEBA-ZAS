@@ -270,26 +270,37 @@ if st.session_state.usuario_activo:
             st.image("https://cdn-icons-png.flaticon.com/512/149/149071.png", width=120)
 
     with col_btn:
-        st.write("📷 **¿Deseas cambiar tu foto?**")
-        archivo_nuevo = st.file_uploader("Sube una imagen (150x150)", type=["jpg", "png", "jpeg"], key="panel_ch_foto")
-        if archivo_nuevo:
-            if st.button("💾 GUARDAR NUEVA FOTO"):
-                with st.spinner("Optimizando..."):
+        with st.expander("📷 Cambiar Foto"):
+            archivo_nuevo = st.file_uploader("Sube foto nueva", type=["jpg", "png"], key="panel_ch_foto")
+            
+            if archivo_nuevo and st.button("💾 Guardar Foto"):
+                with st.spinner("Guardando en base de datos..."):
+                    # 1. Procesar la imagen (Reducir tamaño para que quepa en Excel)
                     img = Image.open(archivo_nuevo).convert("RGB")
                     img = img.resize((150, 150)) 
                     buffered = io.BytesIO()
                     img.save(buffered, format="JPEG", quality=60) 
                     foto_b64 = base64.b64encode(buffered.getvalue()).decode()
-                    res = enviar_datos({
-                        "accion": "actualizar_foto_perfil",
-                        "email": fila_actual.iloc[0]['Email'],
-                        "foto": foto_b64
-                    })
-                    if res:
-                        st.success("✅ ¡Foto guardada!")
+                    
+                    # 2. GUARDADO DIRECTO A GOOGLE SHEETS (Método Infalible)
+                    try:
+                        sh = client.open_by_key(SHEET_ID)
+                        wks = sh.worksheet("CHOFERES")
+                        
+                        # Calculamos la posición exacta de tu fila y la columna de la foto
+                        idx_fila = int(fila_actual.index[0] + 2) # +2 por el encabezado
+                        col_index = df_fresh.columns.get_loc("Foto_Perfil") + 1 # +1 porque Excel empieza en 1
+                        
+                        # Escribimos el código de la foto directo en la celda
+                        wks.update_cell(idx_fila, col_index, foto_b64)
+                        
+                        st.success("✅ Foto guardada PERMANENTEMENTE")
                         st.session_state.datos_usuario['Foto_Perfil'] = foto_b64
-                        time.sleep(1) 
+                        time.sleep(2)
                         st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"Error de conexión: {e}")
     st.write("---") 
 
     gps_activo = st.checkbox("🛰️ ACTIVAR RASTREO GPS", value=True)
