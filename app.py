@@ -308,11 +308,23 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
     return None, None, None, "S/P"
 
 # --- 📱 INTERFAZ ---
-# Título con estilo
+# Usamos columnas para centrar el logo
+c1, c2, c3 = st.columns([1, 1, 1]) # Columnas para centrar
+
+with c2:
+    # AQUÍ SE CARGA TU IMAGEN.
+    # Asegúrate de que el archivo 'logo_zas.png' esté subido en GitHub
+    try:
+        st.image("logo_zas.png", use_container_width=True)
+    except Exception as e:
+        # Si hay un error cargando la imagen, muestra el título de texto como respaldo
+        st.warning(f"No se pudo cargar el logo: {e}")
+        st.markdown("<h1 style='text-align: center;'>⚡ ZAS</h1>", unsafe_allow_html=True)
+
+# Subtítulo con estilo (justo debajo del logo)
 st.markdown("""
     <div style="text-align: center;">
-        <h1 style="margin-bottom: 0;">⚡ ZAS</h1>
-        <h3 style="color: #E91E63; margin-top: -10px;">Tu viaje en un instante</h3>
+        <h3 style="color: #E91E63; margin-top: -15px;">Tu viaje en un instante</h3>
     </div>
 """, unsafe_allow_html=True)
 
