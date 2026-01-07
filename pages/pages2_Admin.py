@@ -9,9 +9,9 @@ from datetime import datetime
 st.set_page_config(page_title="Admin Panel", page_icon="👮‍♂️", layout="wide")
 
 # 🆔 CONEXIÓN
-SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
+SHEET_ID = st.secrets["sheet_id"]
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbwzOVH8c8f9WEoE4OJOTIccz_EgrOpZ8ySURTVRwi0bnQhFnWVdgfX1W8ivTIu5dFfs/exec"
-ADMIN_PASSWORD = "VonVerdi1993@"
+ADMIN_PASSWORD = st.secrets["admin_password"]
 
 # --- FUNCIONES ---
 def cargar_datos(hoja):
