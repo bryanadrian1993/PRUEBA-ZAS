@@ -75,25 +75,25 @@ with tab1:
     st.subheader("Directorio de Conductores")
 # --- 💰 CONTABILIDAD REAL (Comisión: $0.05/km) ---
 st.markdown("---")
-st.subheader("💵 Balance de Ganancias")
+    st.subheader("💵 Balance de Ganancias")
 
-if not df_viajes.empty:
-    # 1. Tu Script guarda la comisión en la Columna K (índice 10)
-    df_viajes['Comision'] = pd.to_numeric(df_viajes.iloc[:, 10], errors='coerce').fillna(0)
+    # --- LÓGICA DE CÁLCULO ROBUSTA ---
+    total_por_cobrar = 0.0
     
-    # 2. Solo sumamos los viajes terminados
-    viajes_terminados = df_viajes[df_viajes['Estado'] == 'TERMINADO ✅']
-    
-    # 3. Totales
-    total_ganado = viajes_terminados['Comision'].sum()
-    km_estimados = total_ganado / 0.05 if total_ganado > 0 else 0
+    if not df.empty and 'DEUDA' in df.columns:
+        for valor in df['DEUDA']:
+            try:
+                # Truco: Quitamos el signo $ y las comas para que sea un número real
+                numero_limpio = float(str(valor).replace('$','').replace(',','').strip())
+                total_por_cobrar += numero_limpio
+            except:
+                continue
 
-    # --- MOSTRAR MÉTRICAS FINANCIERAS ---
+    # Mostramos los resultados
     c1, c2, c3 = st.columns(3)
-    c1.metric("Ganancia Acumulada", f"${total_ganado:,.2f} USD", delta="Tarifa: 5¢/km")
-    c2.metric("Kilómetros Totales", f"{km_estimados:,.1f} Km")
-    c3.metric("Por Cobrar (Pendiente)", f"${total_ganado:,.2f} USD", delta="- Pendiente")
-
+    c1.metric("Ganancia Acumulada", "$0.00 USD") # Esto lo activaremos cuando tengas historial
+    c2.metric("Kilómetros Totales", "0.0 Km")
+    c3.metric("Por Cobrar (Pendiente)", f"${total_por_cobrar:.2f} USD", delta="Deuda activa")
     if 'Conductor Asignado' in viajes_terminados.columns:
         st.write("**Deuda por Conductor (Acumulada):**")
         deuda_chofer = viajes_terminados.groupby('Conductor Asignado')['Comision'].sum()
