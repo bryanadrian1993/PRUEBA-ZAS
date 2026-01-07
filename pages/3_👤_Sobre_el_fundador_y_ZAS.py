@@ -23,13 +23,9 @@ st.markdown("---")
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    try:
-        # La foto debe llamarse 'foto_perfil.jpg'
-        image = Image.open("foto_perfil.jpg")
-        st.image(image, caption="Adrian Campoverde Jaramillo", use_column_width=True)
-    except:
-        st.info("📷 (Espacio para foto)")
-        st.caption("Sube 'foto_perfil.jpg'")
+    # Esta línea busca la foto fija que subiste al servidor
+    image = Image.open("foto_perfil.jpg")
+    st.image(image, caption="Adrian Campoverde Jaramillo", use_column_width=True)
 
 with col2:
     st.markdown('<div class="founder-name">ADRIAN CAMPOVERDE JARAMILLO</div>', unsafe_allow_html=True)
