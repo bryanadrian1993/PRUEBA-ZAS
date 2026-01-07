@@ -19,6 +19,8 @@ def cargar_datos(hoja):
         cache_buster = datetime.now().strftime("%Y%m%d%H%M%S")
         url = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/gviz/tq?tqx=out:csv&sheet={hoja}&cb={cache_buster}"
         df = pd.read_csv(url)
+        # Limpieza de nombres de columnas
+        df.columns = df.columns.str.strip()
         return df
     except: return pd.DataFrame()
 
@@ -73,55 +75,57 @@ tab1, tab2, tab3 = st.tabs(["📋 GESTIÓN CHOFERES", "🗺️ MAPA DE FLOTA", "
 # --- TAB 1: GESTIÓN ---
 with tab1:
     st.subheader("Directorio de Conductores")
-# --- 💰 CONTABILIDAD REAL (Comisión: $0.05/km) ---
-st.markdown("---")
+    
+    # --- 💰 CONTABILIDAD REAL ---
+    st.markdown("---")
     st.subheader("💵 Balance de Ganancias")
 
-    # --- LÓGICA DE CÁLCULO ROBUSTA ---
     total_por_cobrar = 0.0
     
-    if not df.empty and 'DEUDA' in df.columns:
-        for valor in df['DEUDA']:
+    # Usamos df_choferes en lugar de df
+    if not df_choferes.empty and 'DEUDA' in df_choferes.columns:
+        for valor in df_choferes['DEUDA']:
             try:
-                # Truco: Quitamos el signo $ y las comas para que sea un número real
                 numero_limpio = float(str(valor).replace('$','').replace(',','').strip())
                 total_por_cobrar += numero_limpio
             except:
                 continue
 
-    # Mostramos los resultados
     c1, c2, c3 = st.columns(3)
-    c1.metric("Ganancia Acumulada", "$0.00 USD") # Esto lo activaremos cuando tengas historial
+    c1.metric("Ganancia Acumulada", "$0.00 USD") 
     c2.metric("Kilómetros Totales", "0.0 Km")
     c3.metric("Por Cobrar (Pendiente)", f"${total_por_cobrar:.2f} USD", delta="Deuda activa")
-    if 'Conductor Asignado' in viajes_terminados.columns:
-        st.write("**Deuda por Conductor (Acumulada):**")
-        deuda_chofer = viajes_terminados.groupby('Conductor Asignado')['Comision'].sum()
-        st.bar_chart(deuda_chofer)
-else:
-    st.info("No hay viajes registrados para calcular ganancias.")
+
+    st.markdown("---")
     
     if not df_choferes.empty:
         # Mostramos tabla limpia
-        st.dataframe(df_choferes[['Nombre', 'Apellido', 'Telefono', 'Placa', 'Estado', 'Tipo_Vehiculo', 'Pais']], use_container_width=True)
+        # Aseguramos que las columnas existan antes de seleccionarlas
+        cols_to_show = ['Nombre', 'Apellido', 'Telefono', 'Placa', 'Estado']
+        cols_available = [c for c in cols_to_show if c in df_choferes.columns]
         
-        st.markdown("---")
+        st.dataframe(df_choferes[cols_available], use_container_width=True)
+        
         st.subheader("🚫 Zona de Expulsión")
-        lista = df_choferes.apply(lambda x: f"{x['Nombre']} {x['Apellido']}", axis=1).tolist()
-        borrar = st.selectbox("Seleccionar conductor para eliminar:", lista)
-        
-        if st.button("🗑️ ELIMINAR SOCIO", type="primary"):
-            p = borrar.split(" ", 1)
-            if len(p) == 2:
-                with st.spinner("Procesando eliminación..."):
-                    res = enviar_datos({"accion": "admin_borrar_chofer", "nombre": p[0], "apellido": p[1]})
-                    if "ADMIN_BORRADO_OK" in res:
-                        st.success(f"Conductor {borrar} eliminado del sistema.")
-                        import time
-                        time.sleep(2)
-                        st.rerun()
-                    else: st.error("Error al conectar con la base de datos.")
-    else: st.info("No hay conductores registrados.")
+        try:
+            lista = df_choferes.apply(lambda x: f"{x['Nombre']} {x['Apellido']}", axis=1).tolist()
+            borrar = st.selectbox("Seleccionar conductor para eliminar:", lista)
+            
+            if st.button("🗑️ ELIMINAR SOCIO", type="primary"):
+                p = borrar.split(" ", 1)
+                if len(p) >= 2:
+                    with st.spinner("Procesando eliminación..."):
+                        res = enviar_datos({"accion": "admin_borrar_chofer", "nombre": p[0], "apellido": p[1]})
+                        if "ADMIN_BORRADO_OK" in res:
+                            st.success(f"Conductor {borrar} eliminado del sistema.")
+                            import time
+                            time.sleep(2)
+                            st.rerun()
+                        else: st.error("Error al conectar con la base de datos.")
+        except Exception as e:
+            st.error(f"Error cargando lista de eliminación: {e}")
+    else: 
+        st.info("No hay conductores registrados.")
 
 # --- TAB 2: MAPA ---
 with tab2:
@@ -139,51 +143,51 @@ with tab2:
             except:
                 return None
 
-        df_mapa['lat'] = df_mapa['Latitud'].apply(limpiar_coordenada)
-        df_mapa['lon'] = df_mapa['Longitud'].apply(limpiar_coordenada)
-        df_mapa = df_mapa.dropna(subset=['lat', 'lon'])
-        
-        if not df_mapa.empty:
-            # ESTO FALTABA: Definir la vista y la capa
-            view_state = pdk.ViewState(
-                latitude=df_mapa['lat'].mean(),
-                longitude=df_mapa['lon'].mean(),
-                zoom=12,
-                pitch=0
-            )
-
-            layer = pdk.Layer(
-                "ScatterplotLayer",
-                data=df_mapa,
-                get_position='[lon, lat]',
-                get_color='[225, 30, 30, 200]', 
-                get_radius=500, 
-                pickable=True
-            )
-
-            # RENDERIZADO (Alineado correctamente)
-            st.pydeck_chart(pdk.Deck(
-                map_style=None,
-                initial_view_state=view_state,
-                layers=[layer],
-                tooltip={"text": "Conductor: {Conductor}\nÚltima señal: {Hora}"}
-            ))
+        if 'Latitud' in df_mapa.columns and 'Longitud' in df_mapa.columns:
+            df_mapa['lat'] = df_mapa['Latitud'].apply(limpiar_coordenada)
+            df_mapa['lon'] = df_mapa['Longitud'].apply(limpiar_coordenada)
+            df_mapa = df_mapa.dropna(subset=['lat', 'lon'])
             
-            with st.expander("🔍 Ver registro técnico de GPS"):
-                st.dataframe(df_gps)
+            if not df_mapa.empty:
+                view_state = pdk.ViewState(
+                    latitude=df_mapa['lat'].mean(),
+                    longitude=df_mapa['lon'].mean(),
+                    zoom=12,
+                    pitch=0
+                )
+
+                layer = pdk.Layer(
+                    "ScatterplotLayer",
+                    data=df_mapa,
+                    get_position='[lon, lat]',
+                    get_color='[225, 30, 30, 200]', 
+                    get_radius=500, 
+                    pickable=True
+                )
+
+                st.pydeck_chart(pdk.Deck(
+                    map_style=None,
+                    initial_view_state=view_state,
+                    layers=[layer],
+                    tooltip={"text": "Conductor: {Conductor}\nÚltima señal: {Hora}"}
+                ))
+                
+                with st.expander("🔍 Ver registro técnico de GPS"):
+                    st.dataframe(df_gps)
+            else:
+                st.warning("⚠️ Hay datos de GPS, pero no tienen el formato correcto.")
         else:
-            st.warning("⚠️ Hay datos de GPS, pero no tienen el formato correcto para mostrarse.")
+            st.error("Error: El archivo de GPS no tiene columnas 'Latitud' o 'Longitud'.")
     else:
         st.info("Sin señal GPS. Esperando a que los conductores activen su rastreo...")
 
-# --- TAB 3: HISTORIAL (NUEVO) ---
+# --- TAB 3: HISTORIAL ---
 with tab3:
     st.subheader("📂 Registro de Pedidos")
     if st.button("🔄 Actualizar Tabla"):
         st.rerun()
 
     if not df_viajes.empty:
-        # Ordenar para ver el más reciente primero
         try:
             df_viajes = df_viajes.iloc[::-1] # Invierte el orden (últimos primero)
         except: pass
