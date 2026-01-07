@@ -17,7 +17,7 @@ from PIL import Image
 # --- ⚙️ CONFIGURACIÓN DEL SISTEMA ---
 st.set_page_config(page_title="ZAS - App Conductores", page_icon="⚡", layout="centered")
 
-SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
+SHEET_ID = st.secrets["sheet_id"]
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
 LAT_BASE, LON_BASE = -0.466657, -76.989635
 
