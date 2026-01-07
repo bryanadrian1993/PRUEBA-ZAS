@@ -40,7 +40,7 @@ except Exception as e:
 TARIFA_POR_KM = 0.05  # <--- CONFIRMADO: 5 CENTAVOS
 DEUDA_MAXIMA = 10.00
 LINK_PAYPAL = "https://paypal.me/CAMPOVERDEJARAMILLO"
-SHEET_ID = "1l3XXIoAggDd2K9PWnEw-7SDlONbtUvpYVw3UYD_9hus"
+SHEET_ID = st.secrets["sheet_id"]
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
 
 # --- 🛠️ FUNCIONES ---
