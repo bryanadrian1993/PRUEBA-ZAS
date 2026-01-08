@@ -1,4 +1,9 @@
 import streamlit as st
+st.set_page_config(
+    page_title="ZasTaxi Lab",
+    page_icon="logo_zas.png",  # Esto pondrá tu logo en la pestaña
+    layout="wide"
+)
 import pandas as pd
 from streamlit_js_eval import get_geolocation
 from datetime import datetime
@@ -14,8 +19,38 @@ import io
 import base64
 from PIL import Image
 
-# --- ⚙️ CONFIGURACIÓN DEL SISTEMA ---
-st.set_page_config(page_title="ZAS - App Conductores", page_icon="⚡", layout="centered")
+st.set_page_config(page_title="ZasTaxi - Pide tu viaje", page_icon="?")
+
+st.markdown("""
+    <script>
+        // Cambia el nombre de la pestana
+        window.parent.document.title = "ZasTaxi";
+    </script>
+    <style>
+        /* Hace la barra superior transparente pero NO la elimina */
+        header {
+            background-color: rgba(0,0,0,0) !important;
+        }
+        
+        /* Oculta el pie de pagina de la plataforma */
+        footer {visibility: hidden;}
+        
+        /* Asegura que el boton de menu lateral este disponible */
+        [data-testid="stSidebarNav"] {
+            padding-top: 1.5rem !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+    <head>
+        <meta property="og:title" content="ZasTaxi - Tu viaje seguro">
+        <meta property="og:description" content="Tu viaje seguro en un instante.">
+        <meta property="og:image" content="https://www.zastaxi.com/logo_zas.png">
+        <meta property="og:url" content="https://www.zastaxi.com/">
+    </head>
+    """, unsafe_allow_html=True)
+
 
 SHEET_ID = st.secrets["sheet_id"]
 URL_SCRIPT = "https://script.google.com/macros/s/AKfycbz-mcv2rnAiT10CUDxnnHA8sQ4XK0qLP7Hj2IhnzKp5xz5ugjP04HnQSN7OMvy4-4Al/exec"
@@ -96,62 +131,53 @@ def enviar_datos_a_sheets(datos):
             resultado = response.read().decode('utf-8')
             return resultado if resultado else "OK"
     except urllib.error.URLError as e:
-        return f"Error de conexión: {str(e)}"
+        return f"Error de conexion: {str(e)}"
     except Exception as e:
         return f"Error: {str(e)}"
 
 def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
-    # Nota: He quitado los st.write para que no salgan letras en pantalla
-    
     df_c = cargar_datos("CHOFERES")
     df_u = cargar_datos("UBICACIONES")
     
     if df_c.empty or df_u.empty:
         return None, None, None, "Error Datos"
-    
-    tipo_b = tipo_sol.split(" ")[0].upper()
 
-    # FILTRO 1: Solo conductores LIBRES
-    libres = df_c[df_c['ESTADO'].astype(str).str.upper().str.strip() == 'LIBRE']
-    
-    # Si no hay libres, buscamos en todos (Modo Emergencia silencioso)
-    if len(libres) == 0:
-        libres = df_c.copy()
-    
-    # FILTRO 2: Tipo de vehículo
+    # --- FILTROS ESTRICTOS ---
+    # 1. Estado LIBRE
+    libres = df_c[df_c['ESTADO'].astype(str).str.upper().str.strip() == 'LIBRE'].copy()
+
+    # 2. Tipo de Vehiculo Exacto (Ej: Taxi, Camioneta)
+    tipo_buscado = tipo_sol.split(" ")[0].upper()
     if 'TIPO_VEHICULO' in libres.columns:
-        libres = libres[libres['TIPO_VEHICULO'].astype(str).str.upper().str.contains(tipo_b, na=False)]
-        if len(libres) == 0:
-            libres = df_c.copy() # Fallback si no hay del tipo exacto
+        libres = libres[libres['TIPO_VEHICULO'].astype(str).str.upper().str.contains(tipo_buscado, na=False)]
 
-    # Preparar columnas
+    # 3. Deuda Menor a $10.00
+    if 'DEUDA' in libres.columns:
+        libres['DEUDA_NUM'] = pd.to_numeric(libres['DEUDA'], errors='coerce').fillna(0)
+        libres = libres[libres['DEUDA_NUM'] < 10.00]
+
+    if libres.empty:
+        return None, None, None, "No hay conductores que cumplan requisitos"
+
+    # --- LOCALIZACION GPS ---
     col_cond_u = next((c for c in df_u.columns if "CONDUCTOR" in c.upper()), None)
     col_lat_u = next((c for c in df_u.columns if "LAT" in c.upper()), None)
     col_lon_u = next((c for c in df_u.columns if "LON" in c.upper()), None)
-
-    if not (col_cond_u and col_lat_u and col_lon_u):
-        return None, None, None, "Error Cols"
 
     df_u['KEY_CLEAN'] = df_u[col_cond_u].astype(str).str.strip().str.upper()
     
     mejor_chofer = None
     menor_distancia = float('inf')
 
-    # Bucle de búsqueda silencioso
     for idx, chofer in libres.iterrows():
-        n = str(chofer.get('NOMBRE', '')).replace('nan','').strip()
-        a = str(chofer.get('APELLIDO', '')).replace('nan','').strip()
-        nombre_completo = f"{n} {a}".strip().upper()
-        
-        ubi = df_u[df_u['KEY_CLEAN'] == nombre_completo]
+        nombre_full = f"{str(chofer.get('NOMBRE','')).strip()} {str(chofer.get('APELLIDO','')).strip()}".upper()
+        ubi = df_u[df_u['KEY_CLEAN'] == nombre_full]
         
         if not ubi.empty:
             try:
                 lat_cond = float(ubi.iloc[-1][col_lat_u])
                 lon_cond = float(ubi.iloc[-1][col_lon_u])
                 d = calcular_distancia_real(lat_cli, lon_cli, lat_cond, lon_cond)
-                
-                # Radio de búsqueda: ABIERTO (Sin límite)
                 if d < menor_distancia:
                     menor_distancia = d
                     mejor_chofer = chofer
@@ -159,12 +185,12 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
                 continue
 
     if mejor_chofer is not None:
-        t = str(mejor_chofer.get('TELEFONO', '0000000000')).split('.')[0].strip()
-        foto = str(mejor_chofer.get('FOTO_PERFIL', 'SIN_FOTO'))
-        placa = str(mejor_chofer.get('PLACA', 'S/P'))
-        return mejor_chofer, t, foto, placa
+        t = str(mejor_chofer.get('TELEFONO', '0')).split('.')[0].strip()
+        f = str(mejor_chofer.get('FOTO_PERFIL', 'SIN_FOTO'))
+        p = str(mejor_chofer.get('PLACA', 'S/P'))
+        return mejor_chofer, t, f, p
     
-    return None, None, None, "S/P"
+    return None, None, None, "No encontrado"
     
     # Mostrar columnas
     st.write("📋 Columnas en CHOFERES:")
@@ -227,10 +253,7 @@ def obtener_chofer_mas_cercano(lat_cli, lon_cli, tipo_sol):
         st.warning("⚠️ No existe TIPO_VEHICULO")
 
     # FILTRO 3: Deuda
-    if 'DEUDA' in libres.columns:
-        antes = len(libres)
-        libres = libres[pd.to_numeric(libres['DEUDA'], errors='coerce').fillna(0) < 10.00]
-        st.write(f"Después de filtro deuda: {len(libres)} (eliminados: {antes - len(libres)})")
+    
 
     if libres.empty:
         st.error("❌ No quedan conductores después de TODOS los filtros")
@@ -328,7 +351,7 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# --- OBTENER UBICACIÓN GPS ---
+# --- OBTENER UBICACION GPS ---
 loc = get_geolocation()
 lat_actual, lon_actual = None, None
 
@@ -352,69 +375,74 @@ else:
         st.warning("⚠️ Esperando señal GPS... (Permite el acceso a tu ubicación)")
 
 # --- PANTALLA DE SOLICITUD ---
-if not st.session_state.viaje_confirmado:
+if not st.session_state.get('viaje_confirmado', False):
     with st.form("form_pedido"):
-        st.markdown('<div class="step-header">📝 Completa tu solicitud:</div>', unsafe_allow_html=True)
-        nombre_cli = st.text_input("👤 Tu Nombre:", key="nombre_input")
-        celular_input = st.text_input("📱 WhatsApp (Sin código de país):", key="celular_input")
-        ref_cli = st.text_input("📍 Referencia / Dirección:", key="ref_input")
-        tipo_veh = st.selectbox("🚗 ¿Qué necesitas?", ["Taxi 🚖", "Camioneta 🛻", "Ejecutivo 🚔"])
-        
-        enviar = st.form_submit_button("🚖 SOLICITAR UNIDAD", use_container_width=True)
+        st.markdown('<div class="step-header">Complete su solicitud:</div>', unsafe_allow_html=True)
+        nombre_cli = st.text_input("Tu Nombre:", key="nombre_input")
+        celular_input = st.text_input("WhatsApp:", key="celular_input")
+        ref_cli = st.text_input("Referencia / Direccion:", key="ref_input")
+        tipo_veh = st.selectbox("Vehiculo:", ["Taxi", "Camioneta", "Ejecutivo"])
+        enviar = st.form_submit_button("SOLICITAR UNIDAD")
 
     if enviar:
-        # 1. Validaciones
-        if not nombre_cli or not ref_cli:
-            st.error("❌ Por favor completa nombre y referencia.")
-        elif not celular_input or len(celular_input) < 7:
-            st.error("❌ Ingresa un WhatsApp válido.")
-        elif not lat_actual:
-            st.error("🚫 Sin señal GPS. Espera un momento.")
-        else:
-            # 2. Bloqueamos la interfaz visualmente
-            with st.spinner("🚀 Iniciando viaje..."):
+        # BLOQUEO INMEDIATO EN LA APP
+        st.session_state.viaje_confirmado = True 
+        
+        with st.spinner("Buscando conductor..."):
+            chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
+            
+            if chof is not None:
+                # Guardar datos para la pantalla de viaje activo
+                id_v = f"TX-{random.randint(1000, 9999)}"
+                st.session_state.datos_pedido = {
+                    "chof": f"{chof.get('NOMBRE')} {chof.get('APELLIDO')}",
+                    "t_chof": t_chof, 
+                    "foto": foto_chof, 
+                    "placa": placa, 
+                    "id": id_v, 
+                    "lat_cli": lat_actual, 
+                    "lon_cli": lon_actual,
+                    "nombre": nombre_cli, 
+                    "ref": ref_cli,
+                    "mapa": f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
+                }
+                st.session_state.cliente_ocupado = True
                 
-                # Búsqueda rápida
-                chof, t_chof, foto_chof, placa = obtener_chofer_mas_cercano(lat_actual, lon_actual, tipo_veh)
+                # Registro en Sheets con alineacion corregida
+                try:
+                    # 1. Registra el pedido detallado
+                    enviar_datos_a_sheets({
+                        "accion": "registrar_pedido", 
+                        "id_viaje": id_v, 
+                        "cliente": nombre_cli,
+                        "tel_cliente": celular_input,
+                        "referencia": ref_cli,
+                        "conductor": st.session_state.datos_pedido["chof"],
+                        "tel_conductor": t_chof,
+                        "mapa": st.session_state.datos_pedido["mapa"]
+                    })
+                    
+                    # 2. Cambia el estado del chofer a OCUPADO
+                    enviar_datos_a_sheets({
+                        "accion": "cambiar_estado", 
+                        "conductor": st.session_state.datos_pedido["chof"], 
+                        "estado": "OCUPADO"
+                    })
+                except:
+                    pass
                 
-                if chof is not None:
-                    # Preparar datos
-                    n_clean = str(chof.get('NOMBRE', '')).replace('nan','').strip()
-                    a_clean = str(chof.get('APELLIDO', '')).replace('nan','').strip()
-                    nombre_chof = f"{n_clean} {a_clean}".strip().upper()
-                    id_v = f"TX-{random.randint(1000, 9999)}"
-                    mapa_url = f"https://www.google.com/maps?q={lat_actual},{lon_actual}"
+                st.rerun() # Cambia a la interfaz de viaje activo
+            else:
+                # Si no hay conductores, se libera el estado para intentar de nuevo
+                st.session_state.viaje_confirmado = False
+                st.error("No hay conductores disponibles actualmente.")
 
-                    # --- CAMBIO DE ESTADO INMEDIATO (El Truco) ---
-                    # Guardamos sesión PRIMERO para que el cambio de pantalla sea instantáneo
-                    st.session_state.datos_pedido = {
-                        "chof": nombre_chof, "t_chof": t_chof, "foto": foto_chof, "placa": placa, 
-                        "id": id_v, "mapa": mapa_url, "lat_cli": lat_actual, "lon_cli": lon_actual, 
-                        "nombre": nombre_cli, "ref": ref_cli
-                    }
-                    st.session_state.viaje_confirmado = True
-                    
-                    # --- ENVIAR A EXCEL EN "SEGUNDO PLANO" ---
-                    # Usamos un try/except silencioso. Si esto tarda, la app ya habrá cambiado de pantalla.
-                    try:
-                        enviar_datos_a_sheets({
-                            "accion": "registrar_pedido", "id_viaje": id_v, "cliente": nombre_cli, 
-                            "tel_cliente": celular_input, "referencia": ref_cli, "conductor": nombre_chof, 
-                            "tel_conductor": t_chof, "mapa": mapa_url
-                        })
-                        enviar_datos_a_sheets({
-                            "accion": "cambiar_estado", "conductor": nombre_chof, "estado": "OCUPADO"
-                        })
-                    except:
-                        pass 
-
-                    # Forzar recarga inmediata
-                    st.rerun()
-                    
-                else:
-                    st.error("⚠️ No hay conductores disponibles. Intenta de nuevo.")
 # --- PANTALLA DE VIAJE ACTIVO ---
 else:
+    # Bloqueo de seguridad adicional para detener cualquier proceso residual
+    if st.session_state.get('cliente_ocupado', False):
+        pass
+    
     dp = st.session_state.datos_pedido
     
     # Encabezado con ID
@@ -503,12 +531,12 @@ else:
 
                 # Renderizar mapa
                 st.pydeck_chart(pdk.Deck(
-                    map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
-                    initial_view_state=pdk.ViewState(
-                        latitude=(lat_t + dp['lat_cli'])/2, 
-                        longitude=(lon_t + dp['lon_cli'])/2, 
-                        zoom=13.5, 
-                        pitch=0
+		    map_style='https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+		    initial_view_state=pdk.ViewState(
+                        latitude=dp['lat_cli'],  
+                        longitude=dp['lon_cli'], 
+                        zoom=16,                  
+                        pitch=45                 
                     ),
                     tooltip={"text": "{info}"},
                     layers=[
@@ -518,12 +546,12 @@ else:
                 ))
                 
                 # Botón de actualización manual
-                if st.button("🔄 ACTUALIZAR UBICACIÓN", use_container_width=True):
+                if st.button("🔄 ACTUALIZAR UBICACION", use_container_width=True):
                     st.rerun()
             else:
                 st.warning("📡 Esperando señal GPS del conductor...")
         else:
-            st.warning("⚠️ No se pudo cargar el mapa. Verifica la conexión.")
+            st.warning("⚠️ No se pudo cargar el mapa. Verifica la conexion.")
     except Exception as e:
         st.error(f"❌ Error al cargar mapa: {str(e)}")
 
