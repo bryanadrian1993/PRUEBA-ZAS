@@ -22,7 +22,27 @@ import pytz
 from timezonefinder import TimezoneFinder
 
 # --- 🔗 CONFIGURACIÓN TÉCNICA ---
-st.set_page_config(page_title="Portal Conductores", page_icon="🚖", layout="centered")
+st.set_page_config(page_title="ZasTaxi - Socios", page_icon="??")
+st.markdown("""
+    <script>
+        // Cambia el nombre de la pestana
+        window.parent.document.title = "ZasTaxi";
+    </script>
+    <style>
+        /* Hace la barra superior transparente pero NO la elimina */
+        header {
+            background-color: rgba(0,0,0,0) !important;
+        }
+        
+        /* Oculta el pie de pagina de la plataforma */
+        footer {visibility: hidden;}
+        
+        /* Asegura que el boton de menu lateral este disponible */
+        [data-testid="stSidebarNav"] {
+            padding-top: 1.5rem !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- 🔌 CONEXIÓN SEGURA A GOOGLE SHEETS ---
 scopes = [
