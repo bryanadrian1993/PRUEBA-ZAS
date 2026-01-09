@@ -1,4 +1,5 @@
 import streamlit as st
+
 st.set_page_config(
     page_title="ZasTaxi Lab",
     page_icon="logo_zas.png",  # Esto pondrá tu logo en la pestaña
